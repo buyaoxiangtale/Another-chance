@@ -1,350 +1,264 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-const { Story, StorySegment, StoryBranch } = require('@/types/story');
+import { useState, useEffect, use } from 'react';
+import Link from 'next/link';
 
-interface StoryTreeNode {
+interface Story {
+  id: string;
+  title: string;
+  description?: string;
+  author?: string;
+}
+
+interface StorySegment {
   id: string;
   title?: string;
-  content?: string;
-  isBranchPoint: boolean;
-  children: StoryTreeNode[];
-  branchId?: string;
-  parentId?: string;
+  content: string;
   order: number;
+  isBranchPoint: boolean;
+  storyId: string;
+  imageUrls: string[];
 }
 
-// 故事段落组件
-interface StorySegmentProps {
-  segment: StorySegment;
-  onSelectBranch?: (branchId: string) => void;
-  isSelected?: boolean;
-}
+export default function StoryDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params);
+  const [story, setStory] = useState<Story | null>(null);
+  const [segments, setSegments] = useState<StorySegment[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [continuing, setContinuing] = useState(false);
+  const [newContent, setNewContent] = useState('');
 
-function StorySegmentComponent({ segment, onSelectBranch, isSelected }: StorySegmentProps) {
-  return (
-    <div className={`p-4 rounded-lg border-2 transition-all ${
-      isSelected 
-        ? 'border-blue-500 bg-blue-50 shadow-md' 
-        : 'border-gray-200 bg-white'
-    }`}>
-      {segment.title && (
-        <h3 className="font-bold text-lg text-gray-900 mb-2">
-          {segment.title}
-        </h3>
-      )}
-      <p className="text-gray-700 leading-relaxed mb-3">
-        {segment.content}
-      </p>
-      
-      {segment.isBranchPoint && (
-        <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded">
-          <p className="text-sm text-amber-800 font-medium mb-2">
-            🎯 关键分叉点 - 选择故事走向
-          </p>
-          {/* 这里应该显示分支选项，由父组件处理 */}
-        </div>
-      )}
-      
-      {segment.imageUrls && segment.imageUrls.length > 0 && (
-        <div className="mt-3 space-y-2">
-          {segment.imageUrls.map((url, index) => (
-            <div key={index} className="text-sm text-gray-500">
-              <span className="mr-2">🖼️</span>
-              <a href={url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
-                图片 {index + 1}
-              </a>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
+  useEffect(() => {
+    async function load() {
+      try {
+        const [sRes, segRes] = await Promise.all([
+          fetch(`/api/stories/${id}`),
+          fetch(`/api/stories/${id}/segments`)
+        ]);
+        if (!sRes.ok || !segRes.ok) throw new Error('加载失败');
+        const sData = await sRes.json();
+        const segData = await segRes.json();
+        setStory(sData.story);
+        setSegments((segData.segments || []).sort((a: StorySegment, b: StorySegment) => a.order - b.order));
+      } catch (e) {
+        setError(e instanceof Error ? e.message : '未知错误');
+      } finally {
+        setLoading(false);
+      }
+    }
+    load();
+  }, [id]);
 
-// 树状结构组件
-interface StoryTreeProps {
-  story: Story;
-  segments: StorySegment[];
-  branches: StoryBranch[];
-  onSegmentSelect: (segmentId: string) => void;
-  selectedSegmentId?: string;
-}
+  const handleContinue = async () => {
+    if (!segments.length || continuing) return;
+    const lastSeg = segments[segments.length - 1];
+    setContinuing(true);
+    setNewContent('');
 
-function StoryTree({ story, segments, branches, onSegmentSelect, selectedSegmentId }: StoryTreeProps) {
-  // 构建树状结构
-  const buildTree = (): StoryTreeNode[] => {
-    const segmentMap = new Map<string, StorySegment>();
-    const treeMap = new Map<string, StoryTreeNode>();
-    const rootNodes: StoryTreeNode[] = [];
+    try {
+      const res = await fetch(`/api/stories/${id}/stream-continue`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ segmentId: lastSeg.id })
+      });
 
-    // 创建所有节点
-    segments.forEach(segment => {
-      const treeNode: StoryTreeNode = {
-        id: segment.id,
-        title: segment.title,
-        content: segment.content,
-        isBranchPoint: segment.isBranchPoint,
-        children: [],
-        order: segment.order,
-        parentId: segment.parentBranchId
-      };
-      segmentMap.set(segment.id, segment);
-      treeMap.set(segment.id, treeNode);
-    });
+      if (!res.ok) throw new Error('续写失败');
+      const reader = res.body?.getReader();
+      const decoder = new TextDecoder();
+      let full = '';
 
-    // 构建树结构
-    segments.forEach(segment => {
-      const treeNode = treeMap.get(segment.id)!;
-      
-      if (segment.parentBranchId) {
-        // 如果有父分支，查找父分支的段落的节点
-        const parentSegments = segments.filter(s => s.id === segment.parentBranchId);
-        if (parentSegments.length > 0) {
-          const parentNode = treeMap.get(parentSegments[0].id);
-          if (parentNode) {
-            parentNode.children.push(treeNode);
+      while (reader) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        const chunk = decoder.decode(value, { stream: true });
+        // Parse SSE
+        for (const line of chunk.split('\n')) {
+          if (line.startsWith('data: ')) {
+            const data = line.slice(6);
+            if (data === '[DONE]') break;
+            try {
+              const parsed = JSON.parse(data);
+              if (parsed.content) {
+                full += parsed.content;
+                setNewContent(full);
+              }
+            } catch {}
           }
         }
-      } else if (!segment.parentBranchId) {
-        // 根段落
-        rootNodes.push(treeNode);
       }
-    });
 
-    // 按order排序
-    rootNodes.sort((a, b) => a.order - b.order);
-    rootNodes.forEach(node => {
-      node.children.sort((a, b) => a.order - b.order);
-    });
-
-    return rootNodes;
+      // Reload segments after completion
+      const segRes = await fetch(`/api/stories/${id}/segments`);
+      if (segRes.ok) {
+        const segData = await segRes.json();
+        setSegments((segData.segments || []).sort((a: StorySegment, b: StorySegment) => a.order - b.order));
+        setNewContent('');
+      }
+    } catch (e) {
+      alert('续写失败: ' + (e instanceof Error ? e.message : '请重试'));
+    } finally {
+      setContinuing(false);
+    }
   };
 
-  const treeNodes = buildTree();
+  const handleBranch = async (segmentId: string) => {
+    try {
+      const res = await fetch(`/api/stories/${id}/branch`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ segmentId })
+      });
+      if (!res.ok) throw new Error('分叉失败');
+      const segRes = await fetch(`/api/stories/${id}/segments`);
+      if (segRes.ok) {
+        const segData = await segRes.json();
+        setSegments((segData.segments || []).sort((a: StorySegment, b: StorySegment) => a.order - b.order));
+      }
+    } catch (e) {
+      alert('分叉失败: ' + (e instanceof Error ? e.message : '请重试'));
+    }
+  };
 
-  // 递归渲染树节点
-  const renderTreeNode = (node: StoryTreeNode, level: number = 0) => {
-    const isSelected = selectedSegmentId === node.id;
-    const segment = segments.find(s => s.id === node.id);
-    
-    if (!segment) return null;
-
+  if (loading) {
     return (
-      <div key={node.id} className={`${level > 0 ? 'ml-6 mt-2' : ''}`}>
-        <StorySegmentComponent
-          segment={segment}
-          isSelected={isSelected}
-          onSelectBranch={() => node.branchId && onSegmentSelect(node.branchId)}
-        />
-        
-        {node.children.length > 0 && (
-          <div className="mt-3 space-y-2">
-            {node.children.map(child => renderTreeNode(child, level + 1))}
-          </div>
-        )}
+      <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--paper)' }}>
+        <div className="text-center">
+          <div className="text-4xl mb-4 animate-bounce">📜</div>
+          <p className="text-[var(--muted)]">卷轴展开中...</p>
+        </div>
       </div>
     );
-  };
+  }
 
-  if (treeNodes.length === 0) {
+  if (error || !story) {
     return (
-      <div className="text-center py-12">
-        <p className="text-gray-500">暂无故事内容</p>
+      <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--paper)' }}>
+        <div className="text-center">
+          <p className="text-[var(--muted)] mb-4">{error || '故事不存在'}</p>
+          <Link href="/" className="text-[var(--gold)] hover:underline">← 返回故事列表</Link>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-4">
-      {treeNodes.map(node => renderTreeNode(node))}
-    </div>
-  );
-}
-
-// 加载状态组件
-function LoadingSkeleton() {
-  return (
-    <div className="space-y-4">
-      {[1, 2, 3].map((i) => (
-        <div key={i} className="p-4 bg-white rounded-lg border border-gray-200 animate-pulse">
-          <div className="h-6 bg-gray-200 rounded mb-2"></div>
-          <div className="h-4 bg-gray-200 rounded mb-1"></div>
-          <div className="h-4 bg-gray-200 rounded w-2/3"></div>
+    <div className="min-h-screen" style={{ background: 'var(--paper)' }}>
+      {/* 顶部导航 */}
+      <nav className="sticky top-0 z-10 backdrop-blur-sm border-b border-[var(--border)]" style={{ background: 'rgba(250,246,240,0.9)' }}>
+        <div className="max-w-3xl mx-auto px-6 py-3 flex items-center justify-between">
+          <Link href="/" className="text-sm text-[var(--muted)] hover:text-[var(--ink)] transition-colors flex items-center gap-1">
+            ← 故事列表
+          </Link>
+          <h1 className="text-sm font-bold text-[var(--ink)] tracking-wider">{story.title}</h1>
+          <span className="w-16" />
         </div>
-      ))}
-    </div>
-  );
-}
+      </nav>
 
-interface StoryDetailPageProps {
-  params: { id: string };
-}
+      {/* 故事标题区 */}
+      <div className="max-w-3xl mx-auto px-6 pt-12 pb-8 text-center">
+        <div className="divider-ornament mb-4">
+          <span>✦</span>
+        </div>
+        <h1 className="text-3xl md:text-4xl font-bold text-[var(--ink)] tracking-widest mb-3">
+          {story.title}
+        </h1>
+        {story.description && (
+          <p className="text-[var(--muted)] text-sm">{story.description}</p>
+        )}
+      </div>
 
-export default function StoryDetailPage({ params }: StoryDetailPageProps) {
-  const router = useRouter();
-  const [story, setStory] = useState<Story | null>(null);
-  const [segments, setSegments] = useState<StorySegment[]>([]);
-  const [branches, setBranches] = useState<StoryBranch[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [selectedSegmentId, setSelectedSegmentId] = useState<string | undefined>();
+      {/* 故事正文 - 卷轴风格 */}
+      <div className="max-w-3xl mx-auto px-6 pb-20">
+        <div className="relative">
+          {/* 左侧装饰线 */}
+          <div className="absolute left-8 top-0 bottom-0 w-px bg-gradient-to-b from-[var(--gold)] via-[var(--border)] to-transparent" />
 
-  // 加载故事数据
-  useEffect(() => {
-    loadStoryData();
-  }, [params.id]);
+          <div className="space-y-8">
+            {segments.map((seg, idx) => (
+              <div key={seg.id} className="relative pl-16 animate-fade-in-up" style={{ animationDelay: `${idx * 80}ms` }}>
+                {/* 时间线节点 */}
+                <div className={`absolute left-6 top-2 w-5 h-5 rounded-full border-2 flex items-center justify-center ${
+                  seg.isBranchPoint
+                    ? 'border-[var(--accent)] bg-[var(--accent)] branch-pulse'
+                    : 'border-[var(--gold)] bg-[var(--paper)]'
+                }`}>
+                  {seg.isBranchPoint && <span className="text-white text-xs">⚔</span>}
+                </div>
 
-  const loadStoryData = async () => {
-    try {
-      const [storyResponse, segmentsResponse, branchesResponse] = await Promise.all([
-        fetch(`/api/stories/${params.id}`),
-        fetch(`/api/stories/${params.id}/segments`),
-        fetch(`/api/stories/${params.id}/branches`)
-      ]);
+                {/* 段落卡片 */}
+                <div className="rounded-lg border border-[var(--border)] bg-white p-6 shadow-sm">
+                  {seg.title && (
+                    <h3 className="text-lg font-bold text-[var(--ink)] mb-3 flex items-center gap-2">
+                      <span className="text-[var(--gold)]">·</span>
+                      {seg.title}
+                    </h3>
+                  )}
+                  <p className="prose-chinese text-[var(--ink)]">
+                    {seg.content}
+                  </p>
 
-      if (!storyResponse.ok || !segmentsResponse.ok || !branchesResponse.ok) {
-        throw new Error('加载数据失败');
-      }
-
-      const storyData = await storyResponse.json();
-      const segmentsData = await segmentsResponse.json();
-      const branchesData = await branchesResponse.json();
-
-      setStory(storyData.story);
-      setSegments(segmentsData.segments || []);
-      setBranches(branchesData.branches || []);
-      
-      // 自动选择第一个段落
-      if (segmentsData.segments && segmentsData.segments.length > 0) {
-        setSelectedSegmentId(segmentsData.segments[0].id);
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : '未知错误');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // 处理段落选择
-  const handleSegmentSelect = (segmentId: string) => {
-    setSelectedSegmentId(segmentId);
-  };
-
-  // 续写故事
-  const handleContinueStory = async () => {
-    if (!selectedSegmentId) return;
-    
-    try {
-      const response = await fetch(`/api/stories/${params.id}/continue`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          segmentId: selectedSegmentId,
-          style: '古典文学风格',
-          tone: '严肃',
-          length: '中等长度'
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error('续写失败');
-      }
-
-      const data = await response.json();
-      if (data.success) {
-        // 重新加载数据
-        loadStoryData();
-      }
-    } catch (err) {
-      console.error('续写失败:', err);
-      alert('续写失败，请重试');
-    }
-  };
-
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-amber-50 to-orange-50">
-      <div className="container mx-auto px-4 py-8">
-        {/* 导航栏 */}
-        <nav className="mb-6">
-          <button 
-            onClick={() => router.push('/')}
-            className="flex items-center text-blue-600 hover:text-blue-800"
-          >
-            ← 返回故事列表
-          </button>
-        </nav>
-
-        {/* 页头 */}
-        <header className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">{story?.title || '故事详情'}</h1>
-          {story?.description && (
-            <p className="text-gray-600">{story.description}</p>
-          )}
-        </header>
-
-        {/* 主要内容 */}
-        <main className="max-w-4xl mx-auto">
-          {loading && <LoadingSkeleton />}
-          
-          {error && (
-            <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
-              <p className="text-red-600 mb-2">{error}</p>
-              <button 
-                onClick={loadStoryData}
-                className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
-              >
-                重试
-              </button>
-            </div>
-          )}
-
-          {!loading && !error && story && (
-            <div className="space-y-6">
-              {/* 故事树 */}
-              <div>
-                <h2 className="text-2xl font-bold text-gray-900 mb-4">故事发展</h2>
-                <StoryTree
-                  story={story}
-                  segments={segments}
-                  branches={branches}
-                  onSegmentSelect={handleSegmentSelect}
-                  selectedSegmentId={selectedSegmentId}
-                />
+                  {/* 分叉点操作 */}
+                  {seg.isBranchPoint && (
+                    <div className="mt-4 pt-4 border-t border-dashed border-[var(--border)]">
+                      <p className="text-xs text-[var(--accent)] font-medium mb-2 flex items-center gap-1">
+                        ⚔ 关键分叉点 — 选择不同的历史走向
+                      </p>
+                      <button
+                        onClick={() => handleBranch(seg.id)}
+                        className="px-4 py-2 text-sm bg-gradient-to-r from-[var(--accent)] to-red-700 text-white rounded-lg hover:opacity-90 transition-opacity"
+                      >
+                        生成分叉剧情
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
+            ))}
 
-              {/* 操作按钮 */}
-              <div className="flex gap-4">
-                <button
-                  onClick={handleContinueStory}
-                  disabled={!selectedSegmentId}
-                  className={`px-6 py-3 rounded-lg font-medium transition-colors ${
-                    selectedSegmentId
-                      ? 'bg-blue-600 text-white hover:bg-blue-700'
-                      : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                  }`}
-                >
-                  续写故事
-                </button>
-                
-                {selectedSegmentId && (
-                  <button
-                    onClick={() => {
-                      // TODO: 实现分叉功能
-                      console.log('创建分叉');
-                    }}
-                    className="px-6 py-3 bg-purple-600 text-white rounded-lg font-medium hover:bg-purple-700 transition-colors"
-                  >
-                    创建分叉
-                  </button>
-                )}
+            {/* 流式新内容 */}
+            {newContent && (
+              <div className="relative pl-16 animate-fade-in-up">
+                <div className="absolute left-6 top-2 w-5 h-5 rounded-full border-2 border-blue-400 bg-blue-50 flex items-center justify-center">
+                  <span className="text-blue-500 text-xs">✦</span>
+                </div>
+                <div className="rounded-lg border border-blue-200 bg-blue-50/50 p-6 shadow-sm">
+                  <p className="prose-chinese text-[var(--ink)]">
+                    {newContent}
+                    <span className="inline-block w-0.5 h-5 bg-[var(--ink)] animate-pulse ml-0.5 align-text-bottom" />
+                  </p>
+                </div>
               </div>
+            )}
+          </div>
+        </div>
+
+        {/* 底部操作栏 */}
+        {segments.length > 0 && (
+          <div className="mt-12 text-center">
+            <div className="divider-ornament mb-6">
+              <span>✦</span>
             </div>
-          )}
-        </main>
+            <button
+              onClick={handleContinue}
+              disabled={continuing}
+              className={`inline-flex items-center gap-2 px-8 py-3 rounded-full font-medium transition-all ${
+                continuing
+                  ? 'bg-gray-200 text-[var(--muted)] cursor-wait'
+                  : 'bg-gradient-to-r from-amber-700 to-red-800 text-white hover:shadow-lg hover:shadow-amber-900/20'
+              }`}
+            >
+              {continuing ? (
+                <>
+                  <span className="inline-block w-4 h-4 border-2 border-[var(--muted)] border-t-transparent rounded-full animate-spin" />
+                  故事书写中...
+                </>
+              ) : (
+                <>✦ 续写故事</>
+              )}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

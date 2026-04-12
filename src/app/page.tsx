@@ -1,41 +1,81 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-const { Story } = require('@/types/story');
+import Link from 'next/link';
 
-// 故事卡片组件
-interface StoryCardProps {
-  story: Story;
-  onSelect: (story: Story) => void;
+interface Story {
+  id: string;
+  title: string;
+  description?: string;
+  author?: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
-function StoryCard({ story, onSelect }: StoryCardProps) {
+function StoryCard({ story, index }: { story: Story; index: number }) {
+  const eraMap: Record<string, { era: string; icon: string; gradient: string }> = {
+    '荆轲刺秦王': { era: '战国', icon: '🗡️', gradient: 'from-amber-800 to-red-900' },
+    '赤壁之战': { era: '三国', icon: '🔥', gradient: 'from-blue-800 to-indigo-900' },
+    '玄武门之变': { era: '唐', icon: '⚔️', gradient: 'from-emerald-800 to-teal-900' },
+  };
+  const meta = eraMap[story.title] || { era: '历史', icon: '📜', gradient: 'from-gray-700 to-gray-900' };
+
   return (
-    <div 
-      className="p-6 bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow cursor-pointer border border-gray-200"
-      onClick={() => onSelect(story)}
-    >
-      <h3 className="text-xl font-bold text-gray-900 mb-2">{story.title}</h3>
-      {story.description && (
-        <p className="text-gray-600 mb-4 line-clamp-3">{story.description}</p>
-      )}
-      <div className="flex justify-between items-center text-sm text-gray-500">
-        <span>作者：{story.author || '佚名'}</span>
-        <span>{new Date(story.createdAt).toLocaleDateString('zh-CN')}</span>
+    <Link href={`/story/${story.id}`} className="block animate-fade-in-up" style={{ animationDelay: `${index * 100}ms` }}>
+      <div className="story-card rounded-xl overflow-hidden">
+        {/* 顶部装饰条 */}
+        <div className={`h-2 bg-gradient-to-r ${meta.gradient}`} />
+        <div className="p-6">
+          {/* 朝代标签 */}
+          <div className="flex items-center justify-between mb-4">
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-50 text-amber-800 text-sm font-medium rounded-full border border-amber-200">
+              <span>{meta.icon}</span>
+              {meta.era}
+            </span>
+            <span className="text-xs text-[var(--muted)]">
+              {new Date(story.createdAt).toLocaleDateString('zh-CN')}
+            </span>
+          </div>
+
+          {/* 标题 */}
+          <h3 className="text-xl font-bold text-[var(--ink)] mb-2 tracking-wide">
+            {story.title}
+          </h3>
+
+          {/* 描述 */}
+          {story.description && (
+            <p className="text-sm text-[var(--muted)] leading-relaxed mb-4 line-clamp-2">
+              {story.description}
+            </p>
+          )}
+
+          {/* 底部 */}
+          <div className="flex items-center justify-between pt-3 border-t border-[var(--border)]">
+            <span className="text-xs text-[var(--muted)]">
+              {story.author || '佚名'}
+            </span>
+            <span className="text-sm text-[var(--gold)] font-medium flex items-center gap-1">
+              开始阅读 →
+            </span>
+          </div>
+        </div>
       </div>
-    </div>
+    </Link>
   );
 }
 
-// 加载状态组件
 function LoadingSkeleton() {
   return (
-    <div className="space-y-4">
-      {[1, 2, 3, 4, 5, 6].map((i) => (
-        <div key={i} className="p-6 bg-white rounded-lg shadow-md border border-gray-200">
-          <div className="h-6 bg-gray-200 rounded mb-2 animate-pulse"></div>
-          <div className="h-4 bg-gray-200 rounded mb-2 animate-pulse w-3/4"></div>
-          <div className="h-4 bg-gray-200 rounded animate-pulse w-1/2"></div>
+    <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+      {[1, 2, 3].map((i) => (
+        <div key={i} className="animate-pulse rounded-xl border border-[var(--border)] overflow-hidden">
+          <div className="h-2 bg-gray-200" />
+          <div className="p-6 space-y-4">
+            <div className="h-6 bg-gray-200 rounded w-16" />
+            <div className="h-6 bg-gray-200 rounded w-3/4" />
+            <div className="h-4 bg-gray-200 rounded w-full" />
+            <div className="h-4 bg-gray-200 rounded w-2/3" />
+          </div>
         </div>
       ))}
     </div>
@@ -47,110 +87,90 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // 加载故事列表
   useEffect(() => {
-    loadStories();
+    fetch('/api/stories')
+      .then(r => r.ok ? r.json() : Promise.reject())
+      .then(data => setStories(data.stories || []))
+      .catch(() => setError('加载故事列表失败'))
+      .finally(() => setLoading(false));
   }, []);
 
-  const loadStories = async () => {
-    try {
-      const response = await fetch('/api/stories');
-      if (!response.ok) {
-        throw new Error('加载故事列表失败');
-      }
-      const data = await response.json();
-      setStories(data.stories || []);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : '未知错误');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // 选择故事
-  const handleSelectStory = (story: Story) => {
-    // 这里可以导航到故事阅读页面，或者设置当前故事
-    console.log('选择故事:', story);
-    // TODO: 导航到 /story/{story.id}
-  };
-
   return (
-    <div className="min-h-screen bg-gradient-to-br from-amber-50 to-orange-50">
-      <div className="container mx-auto px-4 py-8">
-        {/* 页头 */}
-        <header className="text-center mb-12">
-          <h1 className="text-4xl font-bold text-gray-900 mb-4">
-            古事 - 分叉故事续写平台
+    <div className="min-h-screen" style={{ background: 'var(--paper)' }}>
+      {/* Hero 区域 */}
+      <div className="relative overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-br from-amber-900/5 via-transparent to-red-900/5" />
+        <div className="relative max-w-5xl mx-auto px-6 pt-16 pb-12 text-center">
+          {/* 标题装饰 */}
+          <div className="divider-ornament mb-6">
+            <span>卷</span>
+          </div>
+
+          <h1 className="text-5xl md:text-6xl font-bold text-[var(--ink)] mb-4 tracking-[0.1em]">
+            古事
           </h1>
-          <p className="text-lg text-gray-600 max-w-2xl mx-auto">
-            选择一个历史故事，在关键转折点体验不同的分叉剧情，探索历史的无限可能
+
+          <p className="text-lg text-[var(--muted)] max-w-xl mx-auto leading-relaxed mb-2">
+            以史为鉴，以文为镜
           </p>
-        </header>
+          <p className="text-sm text-[var(--muted)] max-w-lg mx-auto leading-relaxed">
+            选择历史关键转折点，探索不同走向，体验分叉剧情的无限可能
+          </p>
 
-        {/* 主要内容 */}
-        <main className="max-w-4xl mx-auto">
-          {/* 创建新故事按钮 */}
-          <div className="mb-8">
-            <a 
+          <div className="mt-8">
+            <Link
               href="/create"
-              className="w-full md:w-auto px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg font-medium hover:from-blue-700 hover:to-purple-700 transition-all shadow-lg inline-block text-center"
+              className="inline-flex items-center gap-2 px-8 py-3 bg-gradient-to-r from-amber-700 to-red-800 text-white rounded-full font-medium hover:from-amber-800 hover:to-red-900 transition-all shadow-lg hover:shadow-xl"
             >
-              创建新故事
-            </a>
+              ✦ 创建新故事
+            </Link>
           </div>
-
-          {/* 故事列表 */}
-          <div>
-            <h2 className="text-2xl font-bold text-gray-900 mb-6">选择故事</h2>
-            
-            {loading && <LoadingSkeleton />}
-            
-            {error && (
-              <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
-                <p className="text-red-600">{error}</p>
-                <button 
-                  onClick={loadStories}
-                  className="mt-2 px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
-                >
-                  重试
-                </button>
-              </div>
-            )}
-            
-            {!loading && !error && stories.length === 0 && (
-              <div className="text-center py-12">
-                <p className="text-gray-500 mb-4">暂无故事</p>
-                <button 
-                  onClick={() => {
-                    // TODO: 导航到创建故事页面
-                    console.log('创建新故事');
-                  }}
-                  className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-                >
-                  创建第一个故事
-                </button>
-              </div>
-            )}
-            
-            {!loading && !error && stories.length > 0 && (
-              <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-                {stories.map((story) => (
-                  <StoryCard 
-                    key={story.id} 
-                    story={story} 
-                    onSelect={handleSelectStory}
-                  />
-                ))}
-              </div>
-            )}
-          </div>
-        </main>
-
-        {/* 页脚 */}
-        <footer className="mt-16 text-center text-gray-500">
-          <p>&copy; 2026 古事 - 分叉故事续写平台</p>
-        </footer>
+        </div>
       </div>
+
+      {/* 故事列表 */}
+      <div className="max-w-5xl mx-auto px-6 pb-20">
+        <div className="flex items-center gap-4 mb-8">
+          <h2 className="text-2xl font-bold text-[var(--ink)] tracking-wide">故事长卷</h2>
+          <div className="flex-1 h-px bg-gradient-to-r from-[var(--border)] to-transparent" />
+        </div>
+
+        {loading && <LoadingSkeleton />}
+
+        {error && (
+          <div className="text-center py-16">
+            <p className="text-[var(--muted)] mb-4">{error}</p>
+            <button onClick={() => window.location.reload()} className="text-[var(--gold)] hover:underline">
+              重新加载
+            </button>
+          </div>
+        )}
+
+        {!loading && !error && stories.length === 0 && (
+          <div className="text-center py-16">
+            <p className="text-4xl mb-4">📜</p>
+            <p className="text-[var(--muted)] mb-4">暂无故事，开启你的第一段历史旅程</p>
+            <Link href="/create" className="text-[var(--gold)] hover:underline">
+              创建第一个故事 →
+            </Link>
+          </div>
+        )}
+
+        {!loading && !error && stories.length > 0 && (
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+            {stories.map((story, i) => (
+              <StoryCard key={story.id} story={story} index={i} />
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* 页脚 */}
+      <footer className="border-t border-[var(--border)] py-8 text-center">
+        <p className="text-xs text-[var(--muted)]">
+          © 2026 古事 · 分叉故事续写平台
+        </p>
+      </footer>
     </div>
   );
 }

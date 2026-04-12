@@ -54,6 +54,9 @@ export default function StoryDetailPage({ params }: { params: { id: string } }) 
   const [branchingSegmentId, setBranchingSegmentId] = useState<string | null>(null);
   const [userDirection, setUserDirection] = useState('');
   const [customDirection, setCustomDirection] = useState('');
+  const [branching, setBranching] = useState(false);
+  const [branchStep, setBranchStep] = useState(''); // '' | 'thinking' | 'generating' | 'saving'
+  const [branchPreview, setBranchPreview] = useState('');
 
   useEffect(() => {
     async function load() {
@@ -160,7 +163,15 @@ export default function StoryDetailPage({ params }: { params: { id: string } }) 
       return;
     }
 
+    setBranching(true);
+    setBranchStep('thinking');
+    setBranchPreview('');
+
     try {
+      // Step 1: 构思
+      await new Promise(r => setTimeout(r, 800));
+      setBranchStep('generating');
+
       const res = await fetch(`/api/stories/${id}/branch`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -171,9 +182,20 @@ export default function StoryDetailPage({ params }: { params: { id: string } }) 
       });
       if (!res.ok) throw new Error('分叉失败');
       
+      const data = await res.json();
+      setBranchStep('saving');
+
+      // Show preview of generated content
+      const branchContent = data.branches?.map((b: any) => b.content || '').join('\n') || '分叉剧情已生成';
+      setBranchPreview(branchContent);
+
+      await new Promise(r => setTimeout(r, 500));
+
       // Refresh data
-      const segRes = await fetch(`/api/stories/${id}/segments`);
-      const treeRes = await fetch(`/api/stories/${id}/tree`);
+      const [segRes, treeRes] = await Promise.all([
+        fetch(`/api/stories/${id}/segments`),
+        fetch(`/api/stories/${id}/tree`)
+      ]);
       
       if (segRes.ok && treeRes.ok) {
         const segData = await segRes.json();
@@ -187,6 +209,10 @@ export default function StoryDetailPage({ params }: { params: { id: string } }) 
       setBranchingSegmentId(null);
     } catch (e) {
       alert('分叉失败: ' + (e instanceof Error ? e.message : '请重试'));
+    } finally {
+      setBranching(false);
+      setBranchStep('');
+      setBranchPreview('');
     }
   };
 
@@ -243,53 +269,116 @@ export default function StoryDetailPage({ params }: { params: { id: string } }) 
   // Branch Dialog Component
   const BranchDialog = () => (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-      <div className="bg-white rounded-xl border border-[var(--border)] p-6 max-w-md w-full mx-4 shadow-xl">
-        <h3 className="text-lg font-bold text-[var(--ink)] mb-4">选择分叉方向</h3>
-        
-        <div className="space-y-3 mb-6">
-          {['加强战争策略', '转向外交途径', '专注内政发展', '寻求盟友帮助'].map((option) => (
-            <button
-              key={option}
-              onClick={() => setUserDirection(option)}
-              className={`w-full text-left px-4 py-2 rounded-lg border transition-colors ${
-                userDirection === option
-                  ? 'border-[var(--accent)] bg-red-50 text-[var(--accent)]'
-                  : 'border-[var(--border)] hover:border-[var(--gold)]/50'
-              }`}
-            >
-              {option}
-            </button>
-          ))}
-        </div>
+      <div className="bg-white rounded-xl border border-[var(--border)] p-6 max-w-lg w-full mx-4 shadow-xl">
+        {branching ? (
+          /* 进度展示 */
+          <div className="text-center py-4">
+            <div className="mb-6">
+              {/* 步骤指示器 */}
+              <div className="flex items-center justify-center gap-2 mb-4">
+                {['thinking', 'generating', 'saving'].map((step, i) => {
+                  const steps = ['构思分叉方向', 'AI 生成剧情', '保存分支'];
+                  const isActive = branchStep === step;
+                  const isDone = ['thinking', 'generating', 'saving'].indexOf(branchStep) > i;
+                  return (
+                    <div key={step} className="flex items-center gap-2">
+                      <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                        isActive ? 'bg-[var(--accent)] text-white shadow-md scale-105' :
+                        isDone ? 'bg-[var(--jade)] text-white' :
+                        'bg-gray-100 text-[var(--muted)]'
+                      }`}>
+                        {isDone ? '✓' : isActive && <span className="inline-block w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />}
+                        {steps[i]}
+                      </div>
+                      {i < 2 && <div className={`w-6 h-px ${isDone ? 'bg-[var(--jade)]' : 'bg-gray-200'}`} />}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
 
-        <div className="mb-6">
-          <label className="block text-sm font-medium text-[var(--ink)] mb-2">自定义方向</label>
-          <input
-            type="text"
-            value={customDirection}
-            onChange={(e) => {
-              setCustomDirection(e.target.value);
-              setUserDirection('');
-            }}
-            placeholder="输入你想要的故事发展方向..."
-            className="w-full px-3 py-2 rounded-lg border border-[var(--border)] bg-[var(--paper)] text-[var(--ink)] placeholder-[var(--muted)] focus:outline-none focus:ring-2 focus:ring-[var(--gold)] focus:border-transparent"
-          />
-        </div>
+            {/* 生成预览 */}
+            {branchPreview && (
+              <div className="mt-4 p-4 rounded-lg bg-[var(--paper)] border border-[var(--border)] text-left max-h-40 overflow-y-auto">
+                <p className="text-xs text-[var(--muted)] mb-2">生成预览：</p>
+                <p className="text-sm text-[var(--ink)] prose-chinese">{branchPreview.slice(0, 200)}{branchPreview.length > 200 ? '...' : ''}</p>
+              </div>
+            )}
 
-        <div className="flex gap-3">
-          <button
-            onClick={() => setShowBranchDialog(false)}
-            className="flex-1 px-4 py-2 rounded-lg border border-[var(--border)] text-[var(--muted)] hover:text-[var(--ink)] transition-colors"
-          >
-            取消
-          </button>
-          <button
-            onClick={confirmBranch}
-            className="flex-1 px-4 py-2 bg-gradient-to-r from-[var(--accent)] to-red-700 text-white rounded-lg hover:opacity-90 transition-opacity"
-          >
-            生成分叉
-          </button>
-        </div>
+            <p className="text-sm text-[var(--muted)] mt-4 animate-pulse">
+              {branchStep === 'thinking' && '🔮 正在分析故事走向...'}
+              {branchStep === 'generating' && '✍️ AI 正在书写分叉剧情，请稍候...'}
+              {branchStep === 'saving' && '💾 正在保存分支...'}
+            </p>
+          </div>
+        ) : (
+          /* 选择分叉方向 */
+          <>
+            <h3 className="text-lg font-bold text-[var(--ink)] mb-1">⚔ 分叉剧情</h3>
+            <p className="text-sm text-[var(--muted)] mb-4">选择一个方向，或输入你想要的历史走向</p>
+            
+            <div className="space-y-2 mb-5">
+              {[
+                { icon: '🗡️', label: '加强战争策略', desc: '以更精妙的战术改写战局' },
+                { icon: '🤝', label: '转向外交途径', desc: '以谈判和联盟化解危机' },
+                { icon: '🏛️', label: '专注内政发展', desc: '休养生息，积蓄力量' },
+                { icon: '🔄', label: '寻求盟友帮助', desc: '联合他人共同应对挑战' },
+              ].map((option) => (
+                <button
+                  key={option.label}
+                  onClick={() => { setUserDirection(option.label); setCustomDirection(''); }}
+                  className={`w-full text-left px-4 py-3 rounded-lg border transition-all ${
+                    userDirection === option.label
+                      ? 'border-[var(--accent)] bg-red-50 shadow-sm'
+                      : 'border-[var(--border)] hover:border-[var(--gold)]/50 hover:shadow-sm'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <span>{option.icon}</span>
+                    <span className={`font-medium text-sm ${userDirection === option.label ? 'text-[var(--accent)]' : 'text-[var(--ink)]'}`}>
+                      {option.label}
+                    </span>
+                  </div>
+                  <p className="text-xs text-[var(--muted)] mt-0.5 ml-7">{option.desc}</p>
+                </button>
+              ))}
+            </div>
+
+            <div className="mb-5">
+              <label className="block text-sm font-medium text-[var(--ink)] mb-2">✦ 自定义方向</label>
+              <textarea
+                value={customDirection}
+                onChange={(e) => {
+                  setCustomDirection(e.target.value);
+                  if (e.target.value.trim()) setUserDirection('');
+                }}
+                placeholder="例：如果荆轲选择不刺秦王，而是劝说秦王..."
+                rows={2}
+                className="w-full px-3 py-2.5 rounded-lg border border-[var(--border)] bg-[var(--paper)] text-[var(--ink)] placeholder-[var(--muted)] focus:outline-none focus:ring-2 focus:ring-[var(--gold)] focus:border-transparent text-sm resize-none"
+              />
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowBranchDialog(false)}
+                className="flex-1 px-4 py-2.5 rounded-lg border border-[var(--border)] text-[var(--muted)] hover:text-[var(--ink)] hover:bg-gray-50 transition-all text-sm"
+              >
+                取消
+              </button>
+              <button
+                onClick={confirmBranch}
+                disabled={!customDirection.trim() && !userDirection}
+                className={`flex-1 px-4 py-2.5 rounded-lg text-white text-sm font-medium transition-all ${
+                  customDirection.trim() || userDirection
+                    ? 'bg-gradient-to-r from-[var(--accent)] to-red-700 hover:shadow-lg'
+                    : 'bg-gray-200 text-[var(--muted)] cursor-not-allowed'
+                }`}
+              >
+                ⚔ 生成分叉
+              </button>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

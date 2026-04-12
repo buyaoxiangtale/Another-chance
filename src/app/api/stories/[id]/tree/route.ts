@@ -1,143 +1,100 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { storiesStore, segmentsStore, branchesStore, getChildrenSegments, type StorySegment, type StoryBranch } from '@/lib/simple-db';
 
-function buildSegmentTree(segments: StorySegment[], rootSegmentId: string) {
-  const segmentMap = new Map<string, StorySegment & { children: StorySegment[] }>();
-  const root = segments.find(s => s.id === rootSegmentId);
-  
-  if (!root) return null;
+// @ts-ignore
+const { storiesStore, segmentsStore, branchesStore } = require('@/lib/simple-db');
 
-  // 创建所有段落的映射
-  segments.forEach(segment => {
-    segmentMap.set(segment.id, {
-      ...segment,
-      children: []
-    });
-  });
+// Build a flat list with depth info instead of circular tree
+function buildTreeData(segments: any[], branches: any[], storyId: string) {
+  const storySegments = segments.filter((s: any) => s.storyId === storyId);
+  const storyBranches = branches.filter((b: any) => b.storyId === storyId);
 
-  // 构建树结构
-  const treeRoot = segmentMap.get(rootSegmentId);
-  const processed = new Set<string>();
+  // Build main line chain
+  const mainSegs = storySegments.filter((s: any) => s.branchId === 'main');
+  const mainLine: any[] = [];
+  let current = mainSegs.find((s: any) => !s.parentSegmentId);
+  const visited = new Set<string>();
 
-  function addChildren(segmentNode: StorySegment & { children: StorySegment[] }) {
-    if (processed.has(segmentNode.id)) return;
-    processed.add(segmentNode.id);
-
-    const children = segments
-      .filter(s => s.parentSegmentId === segmentNode.id)
-      .map(child => segmentMap.get(child.id)!);
-
-    children.forEach(child => {
-      segmentNode.children.push(child);
-      addChildren(child); // 递归添加子节点
-    });
+  while (current && !visited.has(current.id)) {
+    visited.add(current.id);
+    mainLine.push({ ...current, children: [] as any[] });
+    current = mainSegs.find((s: any) => s.parentSegmentId === current.id);
   }
 
-  addChildren(treeRoot!);
-  return treeRoot;
-}
+  // Attach branches to main line nodes
+  for (const branch of storyBranches) {
+    const sourceIdx = mainLine.findIndex((s: any) => s.id === branch.sourceSegmentId);
+    if (sourceIdx === -1) continue;
 
-function addBranchesToTree(treeNode: StorySegment & { children: StorySegment[] }, branches: StoryBranch[], segments: StorySegment[]) {
-  // 查找与当前节点相关的分支
-  const relatedBranches = branches.filter(branch => 
-    branch.sourceSegmentId === treeNode.id
-  );
+    // Build branch chain
+    const branchSegs = storySegments
+      .filter((s: any) => s.branchId === branch.id)
+      .sort((a: any, b: any) => {
+        // Follow parentSegmentId chain
+        let depth = 0;
+        let cur: any = a;
+        const aRoot = a.id;
+        while (cur.parentSegmentId) {
+          if (cur.parentSegmentId === branch.sourceSegmentId) break;
+          cur = storySegments.find((s: any) => s.id === cur.parentSegmentId);
+          if (!cur) break;
+          depth++;
+        }
+        return depth;
+      });
 
-  relatedBranches.forEach(branch => {
-    // 查找该分支的段落
-    const branchSegments = segments.filter(segment => 
-      segment.branchId === branch.id
-    );
+    const branchChain: any[] = [];
+    let bCur = branchSegs.find((s: any) => s.parentSegmentId === branch.sourceSegmentId);
+    const bVisited = new Set<string>();
 
-    if (branchSegments.length > 0) {
-      // 为每个分支创建子节点
-      branchSegments.forEach(segment => {
-        const branchNode = {
-          ...segment,
-          branchTitle: branch.title,
-          branchId: branch.id,
-          isBranch: true,
-          children: []
-        };
+    while (bCur && !bVisited.has(bCur.id)) {
+      bVisited.add(bCur.id);
+      branchChain.push({
+        ...bCur,
+        branchTitle: branch.title,
+        isBranch: true,
+        children: []
+      });
+      bCur = branchSegs.find((s: any) => s.parentSegmentId === bCur.id);
+    }
 
-        // 递归添加分支的子段落
-        addBranchesToTree(branchNode, branches, segments);
-        treeNode.children.push(branchNode);
+    if (branchChain.length > 0) {
+      mainLine[sourceIdx].children.push({
+        id: branch.id,
+        title: branch.title,
+        userDirection: branch.userDirection,
+        sourceSegmentId: branch.sourceSegmentId,
+        segments: branchChain
       });
     }
-  });
+  }
+
+  return { mainLine, branches: storyBranches };
 }
 
 export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
   try {
     const { id: storyId } = params;
 
-    if (!storyId) {
-      return NextResponse.json({ error: '缺少故事ID' }, { status: 400 });
-    }
-
     const stories = await storiesStore.load();
     const story = stories.find((s: any) => s.id === storyId);
-    
-    if (!story) {
-      return NextResponse.json({ error: '故事不存在' }, { status: 404 });
-    }
+    if (!story) return NextResponse.json({ error: '故事不存在' }, { status: 404 });
 
     const segments = await segmentsStore.load();
     const branches = await branchesStore.load();
 
-    // 获取主线段落
-    const mainSegments = segments.filter((s: StorySegment) => s.storyId === storyId && s.branchId === 'main');
-    
-    if (mainSegments.length === 0) {
-      return NextResponse.json({
-        success: true,
-        story: story,
-        tree: null,
-        branches: [],
-        message: '故事还没有主线段落'
-      });
-    }
-
-    // 找到主线根段落（parentSegmentId 为空的段落）
-    const rootSegment = mainSegments.find((s: StorySegment) => !s.parentSegmentId || s.parentSegmentId === '');
-    
-    if (!rootSegment) {
-      return NextResponse.json({
-        success: true,
-        story: story,
-        tree: null,
-        branches: [],
-        message: '无法找到主线根段落'
-      });
-    }
-
-    // 构建主线树
-    const mainTree = buildSegmentTree(mainSegments, rootSegment.id);
-    
-    // 添加分支到主线树
-    addBranchesToTree(mainTree!, branches, segments);
-
-    // 获取所有分支信息
-    const storyBranches = branches.filter((b: StoryBranch) => b.storyId === storyId);
+    const { mainLine, branches: storyBranches } = buildTreeData(segments, branches, storyId);
 
     return NextResponse.json({
       success: true,
-      story: story,
-      tree: mainTree,
+      story,
+      tree: mainLine,
       branches: storyBranches,
-      totalSegments: segments.filter((s: StorySegment) => s.storyId === storyId).length,
+      totalSegments: segments.filter((s: any) => s.storyId === storyId).length,
       totalBranches: storyBranches.length
     });
 
   } catch (error) {
-    console.error('获取故事树结构失败:', error);
-    return NextResponse.json(
-      { 
-        error: '获取故事树结构失败',
-        details: error instanceof Error ? error.message : '未知错误'
-      },
-      { status: 500 }
-    );
+    console.error('获取故事树失败:', error);
+    return NextResponse.json({ error: '获取故事树失败' }, { status: 500 });
   }
 }

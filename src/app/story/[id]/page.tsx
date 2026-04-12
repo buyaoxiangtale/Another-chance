@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, use } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 
 interface Story {
@@ -20,8 +20,8 @@ interface StorySegment {
   imageUrls: string[];
 }
 
-export default function StoryDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = use(params);
+export default function StoryDetailPage({ params }: { params: { id: string } }) {
+  const { id } = params;
   const [story, setStory] = useState<Story | null>(null);
   const [segments, setSegments] = useState<StorySegment[]>([]);
   const [loading, setLoading] = useState(true);

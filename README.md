@@ -49,7 +49,7 @@
 
 1. **克隆项目**
 ```bash
-git clone https://github.com/your-username/gushi.git
+git clone https://github.com/buyaoxiangtale/Another-chance.git
 cd gushi
 ```
 

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-const { Story, StorySegment, StoryBranch } = require('@/types/story');
+import type { StorySegment, Story } from '@/types/story';
 
 interface BranchOption {
   id: string;

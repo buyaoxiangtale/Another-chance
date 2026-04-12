@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { storiesStore } from '@/lib/simple-db';
+import { storiesStore, segmentsStore, type Story, type StorySegment } from '@/lib/simple-db';
 
 export async function GET() {
   try {
     const stories = await storiesStore.load();
     
     // 按创建时间倒序排列
-    const sortedStories = stories.sort((a: any, b: any) => 
+    const sortedStories = stories.sort((a: Story, b: Story) => 
       new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     );
 
@@ -42,7 +42,7 @@ export async function POST(request: NextRequest) {
     const stories = await storiesStore.load();
 
     // 幂等：标题已存在则返回已有故事
-    const existing = stories.find((s: any) => s.title === title);
+    const existing = stories.find((s: Story) => s.title === title);
     if (existing) {
       return NextResponse.json({
         success: true,
@@ -51,7 +51,7 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    const newStory = {
+    const newStory: Story = {
       id: `story_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       title,
       description: description || '',
@@ -63,10 +63,34 @@ export async function POST(request: NextRequest) {
     stories.push(newStory);
     await storiesStore.save(stories);
 
+    // 自动生成首个段落（故事开篇）
+    const firstSegment: StorySegment = {
+      id: `seg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      title: `${title}·开篇`,
+      content: `《${title}》的故事开始了...`, // 临时内容，后续通过 AI 生成完整开篇
+      isBranchPoint: false,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      storyId: newStory.id,
+      branchId: 'main',
+      parentSegmentId: '',
+      imageUrls: []
+    };
+
+    const segments = await segmentsStore.load();
+    segments.push(firstSegment);
+    await segmentsStore.save(segments);
+
+    // 更新故事的 rootSegmentId
+    newStory.rootSegmentId = firstSegment.id;
+    const updatedStories = stories.map((s: Story) => s.id === newStory.id ? newStory : s);
+    await storiesStore.save(updatedStories);
+
     return NextResponse.json({
       success: true,
       story: newStory,
-      message: '故事创建成功'
+      firstSegment,
+      message: '故事创建成功，已生成开篇段落'
     }, { status: 201 });
 
   } catch (error) {

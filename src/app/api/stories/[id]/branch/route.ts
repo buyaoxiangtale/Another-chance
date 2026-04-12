@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-
-// @ts-ignore
-const { storiesStore, segmentsStore } = require('@/lib/simple-db');
+import { storiesStore, segmentsStore, branchesStore } from '@/lib/simple-db';
 
 // Simple AI call helper
 async function callAI(prompt: string): Promise<string> {
@@ -38,10 +36,10 @@ async function callAI(prompt: string): Promise<string> {
 export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
   try {
     const { id: storyId } = params;
-    const { segmentId } = await request.json();
+    const { segmentId, userDirection, branchTitle } = await request.json();
 
-    if (!storyId || !segmentId) {
-      return NextResponse.json({ error: '缺少参数' }, { status: 400 });
+    if (!storyId || !segmentId || !userDirection) {
+      return NextResponse.json({ error: '缺少必要参数: segmentId, userDirection' }, { status: 400 });
     }
 
     const stories = await storiesStore.load();
@@ -52,10 +50,28 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     const currentSegment = segments.find((s: any) => s.id === segmentId && s.storyId === storyId);
     if (!currentSegment) return NextResponse.json({ error: '段落不存在' }, { status: 404 });
 
-    // Get previous segments for context
-    const prevSegments = segments
-      .filter((s: any) => s.storyId === storyId && s.order <= currentSegment.order)
-      .sort((a: any, b: any) => a.order - b.order);
+    // 生成新的分支 ID
+    const branchId = `branch_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+    
+    // 创建分支记录
+    const newBranch = {
+      id: branchId,
+      title: branchTitle || `分叉: ${userDirection}`,
+      sourceSegmentId: segmentId,
+      storyId: storyId,
+      userDirection: userDirection,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+
+    const branches = await branchesStore.load();
+    branches.push(newBranch);
+    await branchesStore.save(branches);
+
+    // 生成分支内容的 AI 提示
+    const prevSegments = segments.filter((s: any) => 
+      s.storyId === storyId && new Date(s.createdAt) <= new Date(currentSegment.createdAt)
+    ).sort((a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
     const contextSummary = prevSegments.map((s: any) =>
       `${s.title ? `【${s.title}】` : ''}${s.content}`
@@ -67,77 +83,69 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
 当前故事进展：
 ${contextSummary}
 
-现在到了一个关键分叉点。请生成2个不同的故事走向分支。
+用户希望的故事走向：${userDirection}
 
-对于每个分支，请输出：
-分支标题：xxx
-分支内容：一段100-200字的续写内容，风格为古典文学风格，与前文保持连续性。
+请根据用户指定的方向，续写下一段（150-300字），保持古典文学风格，与前文情节连续。`;
 
-请用以下格式输出：
-【分支一】
-标题：xxx
-内容：xxx
+    // 使用正确的 AI API 配置
+    const baseUrl = process.env.AI_BASE_URL || 'https://open.bigmodel.cn/api/paas/v4';
+    const apiKey = process.env.AI_API_KEY || '';
+    const model = process.env.AI_MODEL || 'glm-5.1';
 
-【分支二】
-标题：xxx
-内容：xxx`;
+    const aiResponse = await fetch(`${baseUrl}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model,
+        messages: [
+          { role: 'system', content: '你是一位精通中国历史的文学作家，擅长古典文学风格的写作。请用中文回答。' },
+          { role: 'user', content: prompt }
+        ],
+        temperature: 0.7,
+        max_tokens: 2000
+      })
+    });
 
-    const aiResponse = await callAI(prompt);
-
-    // Parse branches from AI response
-    const branchRegex = /【分支[一二二三四五六七八九十]+】\s*标题[：:]\s*(.+?)\s*内容[：:]\s*([\s\S]+?)(?=【分支|$)/g;
-    const parsedBranches: any[] = [];
-    let match;
-
-    while ((match = branchRegex.exec(aiResponse)) !== null) {
-      parsedBranches.push({
-        title: match[1].trim(),
-        content: match[2].trim()
-      });
+    if (!aiResponse.ok) {
+      const text = await aiResponse.text();
+      throw new Error(`AI API error ${aiResponse.status}: ${text}`);
     }
 
-    // If parsing failed, create a single branch with the full response
-    if (parsedBranches.length === 0) {
-      parsedBranches.push({
-        title: '分叉剧情',
-        content: aiResponse.trim()
-      });
-    }
+    const data = await aiResponse.json();
+    // 对于 glm-5.1，content 字段在 choices[0].message.content 中
+    const aiContent = data.choices?.[0]?.message?.content || '';
 
-    // Save branches as new segments
-    const newSegments = [];
-    const maxOrder = Math.max(...segments.filter((s: any) => s.storyId === storyId).map((s: any) => s.order || 0), 0);
+    // 创建新段落
+    const newSegment = {
+      id: `seg_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
+      storyId,
+      title: branchTitle || `分叉: ${userDirection}`,
+      content: aiContent,
+      isBranchPoint: false,
+      branchId: branchId, // 新段落在新分支中
+      parentSegmentId: segmentId, // 父段落为当前段落
+      imageUrls: [],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
 
-    for (let i = 0; i < parsedBranches.length; i++) {
-      const branch = parsedBranches[i];
-      const newSegment = {
-        id: `seg_${Date.now()}_${i}_${Math.random().toString(36).substr(2, 6)}`,
-        storyId,
-        title: branch.title,
-        content: branch.content,
-        order: maxOrder + i + 1,
-        isBranchPoint: false,
-        parentBranchId: segmentId,
-        imageUrls: [],
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      };
-      newSegments.push(newSegment);
-    }
-
-    const allSegments = [...segments, ...newSegments];
-    await segmentsStore.save(allSegments);
+    segments.push(newSegment);
+    await segmentsStore.save(segments);
 
     return NextResponse.json({
       success: true,
-      branches: newSegments,
-      totalBranches: newSegments.length
+      branch: newBranch,
+      segment: newSegment,
+      message: '分支创建成功'
     });
 
   } catch (error) {
     console.error('故事分叉失败:', error);
     return NextResponse.json(
-      { error: '故事分叉失败', details: String(error) },
+      { error: '故事分叉失败', details: error instanceof Error ? error.message : '未知错误' },
       { status: 500 }
     );
   }

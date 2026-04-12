@@ -8,9 +8,7 @@
     "imageUrls": [],
     "id": "1775987984228",
     "createdAt": "2026-04-12T09:59:44.228Z",
-    "updatedAt": "2026-04-12T09:59:44.228Z",
-    "branchId": "main",
-    "parentSegmentId": ""
+    "updatedAt": "2026-04-12T09:59:44.228Z"
   },
   {
     "title": "燕赵告别",
@@ -21,9 +19,7 @@
     "imageUrls": [],
     "id": "1775987984229",
     "createdAt": "2026-04-12T09:59:44.229Z",
-    "updatedAt": "2026-04-12T09:59:44.229Z",
-    "branchId": "main",
-    "parentSegmentId": "1775987984228"
+    "updatedAt": "2026-04-12T09:59:44.229Z"
   },
   {
     "title": "谋士建议",
@@ -34,9 +30,7 @@
     "imageUrls": [],
     "id": "1775987984229",
     "createdAt": "2026-04-12T09:59:44.229Z",
-    "updatedAt": "2026-04-12T09:59:44.229Z",
-    "branchId": "main",
-    "parentSegmentId": "1775987984229"
+    "updatedAt": "2026-04-12T09:59:44.229Z"
   },
   {
     "title": "朝堂风云",
@@ -47,9 +41,7 @@
     "imageUrls": [],
     "id": "1775987984229",
     "createdAt": "2026-04-12T09:59:44.229Z",
-    "updatedAt": "2026-04-12T09:59:44.229Z",
-    "branchId": "main",
-    "parentSegmentId": "1775987984229"
+    "updatedAt": "2026-04-12T09:59:44.229Z"
   },
   {
     "title": "狩猎埋伏",
@@ -60,9 +52,7 @@
     "imageUrls": [],
     "id": "1775987984229",
     "createdAt": "2026-04-12T09:59:44.229Z",
-    "updatedAt": "2026-04-12T09:59:44.229Z",
-    "branchId": "main",
-    "parentSegmentId": "1775987984229"
+    "updatedAt": "2026-04-12T09:59:44.229Z"
   },
   {
     "title": "美人计",
@@ -73,9 +63,7 @@
     "imageUrls": [],
     "id": "1775987984230",
     "createdAt": "2026-04-12T09:59:44.230Z",
-    "updatedAt": "2026-04-12T09:59:44.230Z",
-    "branchId": "main",
-    "parentSegmentId": "1775987984229"
+    "updatedAt": "2026-04-12T09:59:44.230Z"
   },
   {
     "title": "历史走向",
@@ -86,9 +74,7 @@
     "imageUrls": [],
     "id": "1775987984230",
     "createdAt": "2026-04-12T09:59:44.230Z",
-    "updatedAt": "2026-04-12T09:59:44.230Z",
-    "branchId": "main",
-    "parentSegmentId": "1775987984230"
+    "updatedAt": "2026-04-12T09:59:44.230Z"
   },
   {
     "title": "序幕",
@@ -99,9 +85,7 @@
     "imageUrls": [],
     "id": "17759903834141ac2yptxh",
     "createdAt": "2026-04-12T10:39:43.414Z",
-    "updatedAt": "2026-04-12T10:39:43.414Z",
-    "branchId": "main",
-    "parentSegmentId": "1775987984230"
+    "updatedAt": "2026-04-12T10:39:43.414Z"
   },
   {
     "title": "面见秦王",
@@ -112,9 +96,7 @@
     "imageUrls": [],
     "id": "1775990383414gc7oqai8r",
     "createdAt": "2026-04-12T10:39:43.414Z",
-    "updatedAt": "2026-04-12T10:39:43.414Z",
-    "branchId": "main",
-    "parentSegmentId": "17759903834141ac2yptxh"
+    "updatedAt": "2026-04-12T10:39:43.414Z"
   },
   {
     "id": "seg_1775995389035_yqbyiw",
@@ -125,48 +107,7 @@
     "isBranchPoint": false,
     "imageUrls": [],
     "createdAt": "2026-04-12T12:03:09.035Z",
-    "updatedAt": "2026-04-12T12:03:09.035Z",
-    "branchId": "main",
-    "parentSegmentId": "1775990383414gc7oqai8r"
-  },
-  {
-    "id": "seg_1775995533319_tzbuty",
-    "storyId": "story_1_荆轲刺秦王",
-    "title": "故事续写",
-    "content": "",
-    "order": 10,
-    "isBranchPoint": false,
-    "imageUrls": [],
-    "createdAt": "2026-04-12T12:05:33.319Z",
-    "updatedAt": "2026-04-12T12:05:33.319Z",
-    "branchId": "main",
-    "parentSegmentId": "seg_1775995389035_yqbyiw"
-  },
-  {
-    "id": "seg_1776000126741_httrvj",
-    "storyId": "story_1_荆轲刺秦王",
-    "title": "故事续写",
-    "content": "说时迟那时快，图穷匕见，荆轲左手死死捽住秦王之袖，右手持那淬毒利刃，直取嬴政心窝。秦王大惊，本能地向后猛仰，发力挣扎间，竟将锦绣王袍撕裂，挣脱开来。\n\n嬴政骇然，急欲拔腰间长剑自卫，然佩剑身长，仓促间竟拔之不出。荆轲逐之，秦王遂绕殿中巨大铜柱狼狈奔逃。满朝文武皆惊惶失措，因秦法严苛，阶下武士无诏不得上殿，殿上臣子又皆手无寸铁，一时竟无人能救。\n\n正危急间，御医夏无且将随行药囊猛砸向荆轲。荆轲稍作格挡，攻势微滞。秦王借此喘息之机，听从左右急呼“王负剑”，将剑鞘推向身后，终拔长剑出鞘，反手一挥，寒光闪处，已斩断荆轲左腿。荆轲颓然倒地，知大势已去，乃将手中匕首奋力掷向秦王，可惜只击中了铜柱，火星四溅。",
-    "order": 11,
-    "isBranchPoint": false,
-    "imageUrls": [],
-    "createdAt": "2026-04-12T13:22:06.741Z",
-    "updatedAt": "2026-04-12T13:22:06.741Z",
-    "branchId": "main",
-    "parentSegmentId": "seg_1775995533319_tzbuty"
-  },
-  {
-    "id": "seg_1776000226466_fbkoe3",
-    "storyId": "story_1_荆轲刺秦王",
-    "title": "故事续写",
-    "content": "火星四溅间，荆轲倚靠铜柱，知大势已去，乃披发箕踞，仰天狂笑。他双目怒睁如炬，直视殿上秦王，厉声大呼：“事所以不成者，乃欲以生劫之，必得约契以报太子也！”其声慷慨激越，响彻梁尘，满殿文武皆屏息慑服，无一人敢前。\n\n嬴政惊魂甫定，闻言更是骇然且怒，面色铁青。此时殿下武士闻变，终得持戟蜂拥而入，乱刃齐下，血溅五步，一代刺客就此殒命。\n\n咸阳宫内血腥刺鼻，嬴政颓然坐于王座，良久方能平息喘息。他顾视地上残袍断剑，乃下诏厚赏御医夏无且，叹曰：“无且忠义，爱我至深！”经此惊天一刺，秦王雷霆震怒，益发坚定了扫平天下之志，即日便命大将王翦破燕，誓将燕国踏平。荆轲壮志未酬身先死，然其视死如归之烈气，已化作千古悲歌，令后世闻风而泣。",
-    "order": 12,
-    "isBranchPoint": false,
-    "imageUrls": [],
-    "createdAt": "2026-04-12T13:23:46.466Z",
-    "updatedAt": "2026-04-12T13:23:46.466Z",
-    "branchId": "main",
-    "parentSegmentId": "seg_1776000126741_httrvj"
+    "updatedAt": "2026-04-12T12:03:09.035Z"
   },
   {
     "title": "军师争论",
@@ -177,9 +118,7 @@
     "imageUrls": [],
     "id": "1775987984231",
     "createdAt": "2026-04-12T09:59:44.231Z",
-    "updatedAt": "2026-04-12T09:59:44.231Z",
-    "branchId": "main",
-    "parentSegmentId": ""
+    "updatedAt": "2026-04-12T09:59:44.231Z"
   },
   {
     "title": "火烧赤壁",
@@ -190,9 +129,7 @@
     "imageUrls": [],
     "id": "1775987984231",
     "createdAt": "2026-04-12T09:59:44.231Z",
-    "updatedAt": "2026-04-12T09:59:44.231Z",
-    "branchId": "main",
-    "parentSegmentId": "1775987984231"
+    "updatedAt": "2026-04-12T09:59:44.231Z"
   },
   {
     "title": "三国鼎立",
@@ -203,9 +140,7 @@
     "imageUrls": [],
     "id": "1775987984231",
     "createdAt": "2026-04-12T09:59:44.231Z",
-    "updatedAt": "2026-04-12T09:59:44.231Z",
-    "branchId": "main",
-    "parentSegmentId": "1775987984231"
+    "updatedAt": "2026-04-12T09:59:44.231Z"
   },
   {
     "title": "联军 formed",
@@ -216,9 +151,7 @@
     "imageUrls": [],
     "id": "1775990383414hafvh0mzy",
     "createdAt": "2026-04-12T10:39:43.414Z",
-    "updatedAt": "2026-04-12T10:39:43.414Z",
-    "branchId": "main",
-    "parentSegmentId": "1775987984231"
+    "updatedAt": "2026-04-12T10:39:43.414Z"
   },
   {
     "id": "seg_1775995151716_0_7stdy5",
@@ -230,9 +163,7 @@
     "parentBranchId": "1775987984231",
     "imageUrls": [],
     "createdAt": "2026-04-12T11:59:11.717Z",
-    "updatedAt": "2026-04-12T11:59:11.717Z",
-    "branchId": "main",
-    "parentSegmentId": "1775990383414hafvh0mzy"
+    "updatedAt": "2026-04-12T11:59:11.717Z"
   },
   {
     "id": "seg_1775995151717_1_livxd8",
@@ -244,9 +175,7 @@
     "parentBranchId": "1775987984231",
     "imageUrls": [],
     "createdAt": "2026-04-12T11:59:11.717Z",
-    "updatedAt": "2026-04-12T11:59:11.717Z",
-    "branchId": "main",
-    "parentSegmentId": "seg_1775995151716_0_7stdy5"
+    "updatedAt": "2026-04-12T11:59:11.717Z"
   },
   {
     "id": "seg_1775995317316_0_1j3j2e",
@@ -258,9 +187,7 @@
     "parentBranchId": "1775987984231",
     "imageUrls": [],
     "createdAt": "2026-04-12T12:01:57.316Z",
-    "updatedAt": "2026-04-12T12:01:57.316Z",
-    "branchId": "main",
-    "parentSegmentId": "seg_1775995151717_1_livxd8"
+    "updatedAt": "2026-04-12T12:01:57.316Z"
   },
   {
     "id": "seg_1775995317316_1_lkszaa",
@@ -272,9 +199,106 @@
     "parentBranchId": "1775987984231",
     "imageUrls": [],
     "createdAt": "2026-04-12T12:01:57.316Z",
-    "updatedAt": "2026-04-12T12:01:57.316Z",
-    "branchId": "main",
-    "parentSegmentId": "seg_1775995317316_0_1j3j2e"
+    "updatedAt": "2026-04-12T12:01:57.316Z"
+  },
+  {
+    "title": "太子之争",
+    "content": "唐朝初年，太子李建成与秦王李世民之间的矛盾日益激化。李世民在唐朝建立过程中战功赫赫，威望极高，让太子李建成感到威胁。两人各自培植势力，明争暗斗，朝堂之上剑拔弩张。",
+    "order": 0,
+    "isBranchPoint": false,
+    "storyId": "story_3_玄武门之变",
+    "imageUrls": [],
+    "id": "1775987984232",
+    "createdAt": "2026-04-12T09:59:44.232Z",
+    "updatedAt": "2026-04-12T09:59:44.232Z"
+  },
+  {
+    "title": "暗中较量",
+    "content": "李建成联合齐王李元吉，不断在皇帝李渊面前诋毁李世民，削减他的兵权。李世民也不甘示弱，暗中培植自己的心腹，收买朝廷重臣。两人都想在关键时刻占据主动，为日后的皇位争夺做准备。",
+    "order": 1,
+    "isBranchPoint": true,
+    "storyId": "story_3_玄武门之变",
+    "imageUrls": [],
+    "id": "1775987984232",
+    "createdAt": "2026-04-12T09:59:44.232Z",
+    "updatedAt": "2026-04-12T09:59:44.232Z"
+  },
+  {
+    "title": "历史抉择",
+    "content": "公元626年，矛盾达到顶点。李世民面临选择：是坐以待毙，还是先发制人？他的谋士房玄龄和杜如晦建议他效仿古代圣贤，在玄武门设下埋伏。但也有人劝他采取更温和的方式，避免流血冲突。",
+    "order": 2,
+    "isBranchPoint": true,
+    "storyId": "story_3_玄武门之变",
+    "imageUrls": [],
+    "id": "1775987984232",
+    "createdAt": "2026-04-12T09:59:44.232Z",
+    "updatedAt": "2026-04-12T09:59:44.232Z"
+  },
+  {
+    "title": "玄武门血变",
+    "content": "李世民决定先发制人。在玄武门设下埋伏，杀死了前来上朝的太子李建成和齐王李元吉。随后率兵控制了宫城，逼迫父亲李渊立自己为太子，不久后让位。李世民登基，是为唐太宗。",
+    "order": 3,
+    "isBranchPoint": false,
+    "storyId": "story_3_玄武门之变",
+    "imageUrls": [],
+    "id": "1775987984232",
+    "createdAt": "2026-04-12T09:59:44.232Z",
+    "updatedAt": "2026-04-12T09:59:44.232Z"
+  },
+  {
+    "title": "权力交接",
+    "content": "李世民选择政治斗争而非军事政变。通过朝堂上的政治操作，逐渐削弱李建成和李元吉的势力。在获得大部分朝臣支持后，李渊被迫承认李世民的才能，主动将皇位传给了李世民，避免了流血冲突。",
+    "order": 4,
+    "isBranchPoint": false,
+    "storyId": "story_3_玄武门之变",
+    "imageUrls": [],
+    "id": "1775987984232",
+    "createdAt": "2026-04-12T09:59:44.232Z",
+    "updatedAt": "2026-04-12T09:59:44.232Z"
+  },
+  {
+    "title": "异国为王",
+    "content": "李世民意识到内部斗争对国家不利，决定放弃皇位争夺。他带着心腹离开长安，前往边疆地区，后来在异国建立了新的政权，成为当地的统治者。而唐朝在李建成和李渊的统治下，走向了不同的发展道路。",
+    "order": 5,
+    "isBranchPoint": false,
+    "storyId": "story_3_玄武门之变",
+    "imageUrls": [],
+    "id": "1775987984232",
+    "createdAt": "2026-04-12T09:59:44.232Z",
+    "updatedAt": "2026-04-12T09:59:44.232Z"
+  },
+  {
+    "title": "兄弟矛盾",
+    "content": "唐朝初年，太子李建成与秦王李世民之间矛盾日益激化。李世民在统一战争中功勋卓著，威胁到太子的地位。",
+    "order": 6,
+    "isBranchPoint": false,
+    "storyId": "story_3_玄武门之变",
+    "imageUrls": [],
+    "id": "1775990383415i2spgobbg",
+    "createdAt": "2026-04-12T10:39:43.415Z",
+    "updatedAt": "2026-04-12T10:39:43.415Z"
+  },
+  {
+    "title": "玄武门兵变",
+    "content": "公元626年，李世民在玄武门设下埋伏，杀死了太子李建成和齐王李元吉，逼迫父亲李渊退位。",
+    "order": 7,
+    "isBranchPoint": true,
+    "storyId": "story_3_玄武门之变",
+    "imageUrls": [],
+    "id": "1775990383415vjq04yva9",
+    "createdAt": "2026-04-12T10:39:43.415Z",
+    "updatedAt": "2026-04-12T10:39:43.415Z"
+  },
+  {
+    "id": "seg_1775995533319_tzbuty",
+    "storyId": "story_1_荆轲刺秦王",
+    "title": "故事续写",
+    "content": "",
+    "order": 10,
+    "isBranchPoint": false,
+    "imageUrls": [],
+    "createdAt": "2026-04-12T12:05:33.319Z",
+    "updatedAt": "2026-04-12T12:05:33.319Z"
   },
   {
     "id": "seg_1775995627866_0_x05ft7",
@@ -286,9 +310,7 @@
     "parentBranchId": "1775987984231",
     "imageUrls": [],
     "createdAt": "2026-04-12T12:07:07.866Z",
-    "updatedAt": "2026-04-12T12:07:07.866Z",
-    "branchId": "main",
-    "parentSegmentId": "seg_1775995317316_1_lkszaa"
+    "updatedAt": "2026-04-12T12:07:07.866Z"
   },
   {
     "id": "seg_1775995627866_1_0tfs5f",
@@ -300,9 +322,7 @@
     "parentBranchId": "1775987984231",
     "imageUrls": [],
     "createdAt": "2026-04-12T12:07:07.866Z",
-    "updatedAt": "2026-04-12T12:07:07.866Z",
-    "branchId": "main",
-    "parentSegmentId": "seg_1775995627866_0_x05ft7"
+    "updatedAt": "2026-04-12T12:07:07.866Z"
   },
   {
     "id": "seg_1775995795374_0_yt7j9b",
@@ -314,9 +334,7 @@
     "parentBranchId": "1775990383414hafvh0mzy",
     "imageUrls": [],
     "createdAt": "2026-04-12T12:09:55.374Z",
-    "updatedAt": "2026-04-12T12:09:55.374Z",
-    "branchId": "main",
-    "parentSegmentId": "seg_1775995627866_1_0tfs5f"
+    "updatedAt": "2026-04-12T12:09:55.374Z"
   },
   {
     "id": "seg_1775995935024_y1l4s8",
@@ -327,9 +345,29 @@
     "isBranchPoint": false,
     "imageUrls": [],
     "createdAt": "2026-04-12T12:12:15.024Z",
-    "updatedAt": "2026-04-12T12:12:15.024Z",
-    "branchId": "main",
-    "parentSegmentId": "seg_1775995795374_0_yt7j9b"
+    "updatedAt": "2026-04-12T12:12:15.024Z"
+  },
+  {
+    "id": "seg_1776000126741_httrvj",
+    "storyId": "story_1_荆轲刺秦王",
+    "title": "故事续写",
+    "content": "说时迟那时快，图穷匕见，荆轲左手死死捽住秦王之袖，右手持那淬毒利刃，直取嬴政心窝。秦王大惊，本能地向后猛仰，发力挣扎间，竟将锦绣王袍撕裂，挣脱开来。\n\n嬴政骇然，急欲拔腰间长剑自卫，然佩剑身长，仓促间竟拔之不出。荆轲逐之，秦王遂绕殿中巨大铜柱狼狈奔逃。满朝文武皆惊惶失措，因秦法严苛，阶下武士无诏不得上殿，殿上臣子又皆手无寸铁，一时竟无人能救。\n\n正危急间，御医夏无且将随行药囊猛砸向荆轲。荆轲稍作格挡，攻势微滞。秦王借此喘息之机，听从左右急呼“王负剑”，将剑鞘推向身后，终拔长剑出鞘，反手一挥，寒光闪处，已斩断荆轲左腿。荆轲颓然倒地，知大势已去，乃将手中匕首奋力掷向秦王，可惜只击中了铜柱，火星四溅。",
+    "order": 11,
+    "isBranchPoint": false,
+    "imageUrls": [],
+    "createdAt": "2026-04-12T13:22:06.741Z",
+    "updatedAt": "2026-04-12T13:22:06.741Z"
+  },
+  {
+    "id": "seg_1776000226466_fbkoe3",
+    "storyId": "story_1_荆轲刺秦王",
+    "title": "故事续写",
+    "content": "火星四溅间，荆轲倚靠铜柱，知大势已去，乃披发箕踞，仰天狂笑。他双目怒睁如炬，直视殿上秦王，厉声大呼：“事所以不成者，乃欲以生劫之，必得约契以报太子也！”其声慷慨激越，响彻梁尘，满殿文武皆屏息慑服，无一人敢前。\n\n嬴政惊魂甫定，闻言更是骇然且怒，面色铁青。此时殿下武士闻变，终得持戟蜂拥而入，乱刃齐下，血溅五步，一代刺客就此殒命。\n\n咸阳宫内血腥刺鼻，嬴政颓然坐于王座，良久方能平息喘息。他顾视地上残袍断剑，乃下诏厚赏御医夏无且，叹曰：“无且忠义，爱我至深！”经此惊天一刺，秦王雷霆震怒，益发坚定了扫平天下之志，即日便命大将王翦破燕，誓将燕国踏平。荆轲壮志未酬身先死，然其视死如归之烈气，已化作千古悲歌，令后世闻风而泣。",
+    "order": 12,
+    "isBranchPoint": false,
+    "imageUrls": [],
+    "createdAt": "2026-04-12T13:23:46.466Z",
+    "updatedAt": "2026-04-12T13:23:46.466Z"
   },
   {
     "id": "seg_1776000423324_spuxzt",
@@ -340,112 +378,6 @@
     "isBranchPoint": false,
     "imageUrls": [],
     "createdAt": "2026-04-12T13:27:03.324Z",
-    "updatedAt": "2026-04-12T13:27:03.324Z",
-    "branchId": "main",
-    "parentSegmentId": "seg_1775995935024_y1l4s8"
-  },
-  {
-    "title": "太子之争",
-    "content": "唐朝初年，太子李建成与秦王李世民之间的矛盾日益激化。李世民在唐朝建立过程中战功赫赫，威望极高，让太子李建成感到威胁。两人各自培植势力，明争暗斗，朝堂之上剑拔弩张。",
-    "order": 0,
-    "isBranchPoint": false,
-    "storyId": "story_3_玄武门之变",
-    "imageUrls": [],
-    "id": "1775987984232",
-    "createdAt": "2026-04-12T09:59:44.232Z",
-    "updatedAt": "2026-04-12T09:59:44.232Z",
-    "branchId": "main",
-    "parentSegmentId": ""
-  },
-  {
-    "title": "暗中较量",
-    "content": "李建成联合齐王李元吉，不断在皇帝李渊面前诋毁李世民，削减他的兵权。李世民也不甘示弱，暗中培植自己的心腹，收买朝廷重臣。两人都想在关键时刻占据主动，为日后的皇位争夺做准备。",
-    "order": 1,
-    "isBranchPoint": true,
-    "storyId": "story_3_玄武门之变",
-    "imageUrls": [],
-    "id": "1775987984232",
-    "createdAt": "2026-04-12T09:59:44.232Z",
-    "updatedAt": "2026-04-12T09:59:44.232Z",
-    "branchId": "main",
-    "parentSegmentId": "1775987984232"
-  },
-  {
-    "title": "历史抉择",
-    "content": "公元626年，矛盾达到顶点。李世民面临选择：是坐以待毙，还是先发制人？他的谋士房玄龄和杜如晦建议他效仿古代圣贤，在玄武门设下埋伏。但也有人劝他采取更温和的方式，避免流血冲突。",
-    "order": 2,
-    "isBranchPoint": true,
-    "storyId": "story_3_玄武门之变",
-    "imageUrls": [],
-    "id": "1775987984232",
-    "createdAt": "2026-04-12T09:59:44.232Z",
-    "updatedAt": "2026-04-12T09:59:44.232Z",
-    "branchId": "main",
-    "parentSegmentId": "1775987984232"
-  },
-  {
-    "title": "玄武门血变",
-    "content": "李世民决定先发制人。在玄武门设下埋伏，杀死了前来上朝的太子李建成和齐王李元吉。随后率兵控制了宫城，逼迫父亲李渊立自己为太子，不久后让位。李世民登基，是为唐太宗。",
-    "order": 3,
-    "isBranchPoint": false,
-    "storyId": "story_3_玄武门之变",
-    "imageUrls": [],
-    "id": "1775987984232",
-    "createdAt": "2026-04-12T09:59:44.232Z",
-    "updatedAt": "2026-04-12T09:59:44.232Z",
-    "branchId": "main",
-    "parentSegmentId": "1775987984232"
-  },
-  {
-    "title": "权力交接",
-    "content": "李世民选择政治斗争而非军事政变。通过朝堂上的政治操作，逐渐削弱李建成和李元吉的势力。在获得大部分朝臣支持后，李渊被迫承认李世民的才能，主动将皇位传给了李世民，避免了流血冲突。",
-    "order": 4,
-    "isBranchPoint": false,
-    "storyId": "story_3_玄武门之变",
-    "imageUrls": [],
-    "id": "1775987984232",
-    "createdAt": "2026-04-12T09:59:44.232Z",
-    "updatedAt": "2026-04-12T09:59:44.232Z",
-    "branchId": "main",
-    "parentSegmentId": "1775987984232"
-  },
-  {
-    "title": "异国为王",
-    "content": "李世民意识到内部斗争对国家不利，决定放弃皇位争夺。他带着心腹离开长安，前往边疆地区，后来在异国建立了新的政权，成为当地的统治者。而唐朝在李建成和李渊的统治下，走向了不同的发展道路。",
-    "order": 5,
-    "isBranchPoint": false,
-    "storyId": "story_3_玄武门之变",
-    "imageUrls": [],
-    "id": "1775987984232",
-    "createdAt": "2026-04-12T09:59:44.232Z",
-    "updatedAt": "2026-04-12T09:59:44.232Z",
-    "branchId": "main",
-    "parentSegmentId": "1775987984232"
-  },
-  {
-    "title": "兄弟矛盾",
-    "content": "唐朝初年，太子李建成与秦王李世民之间矛盾日益激化。李世民在统一战争中功勋卓著，威胁到太子的地位。",
-    "order": 6,
-    "isBranchPoint": false,
-    "storyId": "story_3_玄武门之变",
-    "imageUrls": [],
-    "id": "1775990383415i2spgobbg",
-    "createdAt": "2026-04-12T10:39:43.415Z",
-    "updatedAt": "2026-04-12T10:39:43.415Z",
-    "branchId": "main",
-    "parentSegmentId": "1775987984232"
-  },
-  {
-    "title": "玄武门兵变",
-    "content": "公元626年，李世民在玄武门设下埋伏，杀死了太子李建成和齐王李元吉，逼迫父亲李渊退位。",
-    "order": 7,
-    "isBranchPoint": true,
-    "storyId": "story_3_玄武门之变",
-    "imageUrls": [],
-    "id": "1775990383415vjq04yva9",
-    "createdAt": "2026-04-12T10:39:43.415Z",
-    "updatedAt": "2026-04-12T10:39:43.415Z",
-    "branchId": "main",
-    "parentSegmentId": "1775990383415i2spgobbg"
+    "updatedAt": "2026-04-12T13:27:03.324Z"
   }
 ]

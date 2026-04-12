@@ -10,6 +10,14 @@ interface Story {
   author?: string;
   createdAt: string;
   updatedAt: string;
+  totalSegments?: number;
+  totalBranches?: number;
+  latestBranch?: {
+    id: string;
+    title: string;
+    userDirection: string;
+    createdAt: string;
+  };
 }
 
 function StoryCard({ story, index }: { story: Story; index: number }) {
@@ -47,6 +55,35 @@ function StoryCard({ story, index }: { story: Story; index: number }) {
             <p className="text-sm text-[var(--muted)] leading-relaxed mb-4 line-clamp-2">
               {story.description}
             </p>
+          )}
+
+          {/* 统计信息 */}
+          <div className="flex items-center gap-4 mb-4 text-sm">
+            <div className="flex items-center gap-1 text-[var(--muted)]">
+              <span>📝</span>
+              <span>{story.totalSegments || 0} 段落</span>
+            </div>
+            {story.totalBranches && story.totalBranches > 0 && (
+              <div className="flex items-center gap-1 text-[var(--accent)]">
+                <span>🌿</span>
+                <span>{story.totalBranches} 分支</span>
+              </div>
+            )}
+          </div>
+
+          {/* 最新分支信息 */}
+          {story.latestBranch && (
+            <div className="mb-4 p-3 bg-red-50/30 border border-red-200/50 rounded-lg">
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-xs text-[var(--accent)]">最新分支</span>
+                <span className="text-xs text-[var(--muted)]">
+                  {new Date(story.latestBranch.createdAt).toLocaleDateString('zh-CN')}
+                </span>
+              </div>
+              <p className="text-xs text-[var(--accent)] font-medium line-clamp-1">
+                {story.latestBranch.userDirection || story.latestBranch.title}
+              </p>
+            </div>
           )}
 
           {/* 底部 */}
@@ -88,11 +125,45 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch('/api/stories')
-      .then(r => r.ok ? r.json() : Promise.reject())
-      .then(data => setStories(data.stories || []))
-      .catch(() => setError('加载故事列表失败'))
-      .finally(() => setLoading(false));
+    const loadStories = async () => {
+      try {
+        const storiesRes = await fetch('/api/stories');
+        if (!storiesRes.ok) throw new Error('加载故事列表失败');
+        const storiesData = await storiesRes.json();
+        
+        // 为每个故事获取详细信息
+        const storiesWithDetails = await Promise.all(
+          (storiesData.stories || []).map(async (story: Story) => {
+            try {
+              const segmentsRes = await fetch(`/api/stories/${story.id}/segments`);
+              const treeRes = await fetch(`/api/stories/${story.id}/tree`);
+              
+              const segmentsData = await segmentsRes.json();
+              const treeData = await treeRes.json();
+              
+              return {
+                ...story,
+                totalSegments: segmentsData.segments?.length || 0,
+                totalBranches: treeData.branches?.length || 0,
+                latestBranch: treeData.branches?.length > 0 
+                  ? treeData.branches[treeData.branches.length - 1]
+                  : null
+              };
+            } catch {
+              return story; // 如果获取详细信息失败，返回基本信息
+            }
+          })
+        );
+        
+        setStories(storiesWithDetails);
+      } catch (e) {
+        setError('加载故事列表失败');
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    loadStories();
   }, []);
 
   return (

@@ -14,33 +14,70 @@ interface StorySegment {
   id: string;
   title?: string;
   content: string;
-  order: number;
   isBranchPoint: boolean;
   storyId: string;
+  branchId: string;
+  parentSegmentId?: string;
   imageUrls: string[];
+}
+
+interface TreeNode {
+  id: string;
+  title?: string;
+  content?: string;
+  isBranchPoint: boolean;
+  branchId: string;
+  branchTitle?: string;
+  isBranch?: boolean;
+  children: TreeNode[];
+}
+
+interface StoryBranch {
+  id: string;
+  title: string;
+  userDirection: string;
+  sourceSegmentId: string;
 }
 
 export default function StoryDetailPage({ params }: { params: { id: string } }) {
   const { id } = params;
   const [story, setStory] = useState<Story | null>(null);
   const [segments, setSegments] = useState<StorySegment[]>([]);
+  const [branches, setBranches] = useState<StoryBranch[]>([]);
+  const [tree, setTree] = useState<TreeNode | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [continuing, setContinuing] = useState(false);
   const [newContent, setNewContent] = useState('');
+  const [currentBranchId, setCurrentBranchId] = useState('main');
+  const [showBranchDialog, setShowBranchDialog] = useState(false);
+  const [branchingSegmentId, setBranchingSegmentId] = useState<string | null>(null);
+  const [userDirection, setUserDirection] = useState('');
+  const [customDirection, setCustomDirection] = useState('');
 
   useEffect(() => {
     async function load() {
       try {
-        const [sRes, segRes] = await Promise.all([
+        const [sRes, segRes, treeRes] = await Promise.all([
           fetch(`/api/stories/${id}`),
-          fetch(`/api/stories/${id}/segments`)
+          fetch(`/api/stories/${id}/segments`),
+          fetch(`/api/stories/${id}/tree`)
         ]);
-        if (!sRes.ok || !segRes.ok) throw new Error('加载失败');
+        if (!sRes.ok || !segRes.ok || !treeRes.ok) throw new Error('加载失败');
+        
         const sData = await sRes.json();
         const segData = await segRes.json();
+        const treeData = await treeRes.json();
+        
         setStory(sData.story);
-        setSegments((segData.segments || []).sort((a: StorySegment, b: StorySegment) => a.order - b.order));
+        setSegments(segData.segments || []);
+        setBranches(treeData.branches || []);
+        setTree(treeData.tree);
+        
+        // 默认显示主线
+        if (treeData.tree) {
+          setCurrentBranchId('main');
+        }
       } catch (e) {
         setError(e instanceof Error ? e.message : '未知错误');
       } finally {
@@ -52,7 +89,9 @@ export default function StoryDetailPage({ params }: { params: { id: string } }) 
 
   const handleContinue = async () => {
     if (!segments.length || continuing) return;
-    const lastSeg = segments[segments.length - 1];
+    const currentSegment = segments.find(s => s.branchId === currentBranchId);
+    if (!currentSegment) return;
+    
     setContinuing(true);
     setNewContent('');
 
@@ -60,7 +99,10 @@ export default function StoryDetailPage({ params }: { params: { id: string } }) 
       const res = await fetch(`/api/stories/${id}/stream-continue`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ segmentId: lastSeg.id })
+        body: JSON.stringify({ 
+          segmentId: currentSegment.id,
+          branchId: currentBranchId 
+        })
       });
 
       if (!res.ok) throw new Error('续写失败');
@@ -92,7 +134,7 @@ export default function StoryDetailPage({ params }: { params: { id: string } }) 
       const segRes = await fetch(`/api/stories/${id}/segments`);
       if (segRes.ok) {
         const segData = await segRes.json();
-        setSegments((segData.segments || []).sort((a: StorySegment, b: StorySegment) => a.order - b.order));
+        setSegments(segData.segments || []);
         setNewContent('');
       }
     } catch (e) {
@@ -103,21 +145,77 @@ export default function StoryDetailPage({ params }: { params: { id: string } }) 
   };
 
   const handleBranch = async (segmentId: string) => {
+    setBranchingSegmentId(segmentId);
+    setUserDirection('');
+    setCustomDirection('');
+    setShowBranchDialog(true);
+  };
+
+  const confirmBranch = async () => {
+    if (!branchingSegmentId) return;
+    
+    const direction = customDirection.trim() || userDirection;
+    if (!direction) {
+      alert('请选择或输入分叉方向');
+      return;
+    }
+
     try {
       const res = await fetch(`/api/stories/${id}/branch`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ segmentId })
+        body: JSON.stringify({ 
+          segmentId: branchingSegmentId,
+          userDirection: direction
+        })
       });
       if (!res.ok) throw new Error('分叉失败');
+      
+      // Refresh data
       const segRes = await fetch(`/api/stories/${id}/segments`);
-      if (segRes.ok) {
+      const treeRes = await fetch(`/api/stories/${id}/tree`);
+      
+      if (segRes.ok && treeRes.ok) {
         const segData = await segRes.json();
-        setSegments((segData.segments || []).sort((a: StorySegment, b: StorySegment) => a.order - b.order));
+        const treeData = await treeRes.json();
+        setSegments(segData.segments || []);
+        setBranches(treeData.branches || []);
+        setTree(treeData.tree);
       }
+      
+      setShowBranchDialog(false);
+      setBranchingSegmentId(null);
     } catch (e) {
       alert('分叉失败: ' + (e instanceof Error ? e.message : '请重试'));
     }
+  };
+
+  const switchBranch = (branchId: string, branchTitle?: string) => {
+    setCurrentBranchId(branchId);
+    // Filter segments for this branch
+    const branchSegments = segments.filter(s => s.branchId === branchId);
+    if (branchSegments.length > 0) {
+      // Sort by parentSegmentId to maintain order
+      const sortedSegments = [...branchSegments].sort((a, b) => {
+        if (a.parentSegmentId === b.parentSegmentId) return 0;
+        if (!a.parentSegmentId) return -1;
+        if (!b.parentSegmentId) return 1;
+        return 0; // Simple sort for now
+      });
+      setSegments(sortedSegments);
+    }
+  };
+
+  const getCurrentBranchPath = () => {
+    if (currentBranchId === 'main') return ['主线'];
+    
+    const branch = branches.find(b => b.id === currentBranchId);
+    if (branch) {
+      const segment = segments.find(s => s.id === branch.sourceSegmentId);
+      const segmentTitle = segment?.title || '段落';
+      return [segmentTitle, branch.userDirection || branch.title];
+    }
+    return [currentBranchId];
   };
 
   if (loading) {
@@ -142,6 +240,60 @@ export default function StoryDetailPage({ params }: { params: { id: string } }) 
     );
   }
 
+  // Branch Dialog Component
+  const BranchDialog = () => (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+      <div className="bg-white rounded-xl border border-[var(--border)] p-6 max-w-md w-full mx-4 shadow-xl">
+        <h3 className="text-lg font-bold text-[var(--ink)] mb-4">选择分叉方向</h3>
+        
+        <div className="space-y-3 mb-6">
+          {['加强战争策略', '转向外交途径', '专注内政发展', '寻求盟友帮助'].map((option) => (
+            <button
+              key={option}
+              onClick={() => setUserDirection(option)}
+              className={`w-full text-left px-4 py-2 rounded-lg border transition-colors ${
+                userDirection === option
+                  ? 'border-[var(--accent)] bg-red-50 text-[var(--accent)]'
+                  : 'border-[var(--border)] hover:border-[var(--gold)]/50'
+              }`}
+            >
+              {option}
+            </button>
+          ))}
+        </div>
+
+        <div className="mb-6">
+          <label className="block text-sm font-medium text-[var(--ink)] mb-2">自定义方向</label>
+          <input
+            type="text"
+            value={customDirection}
+            onChange={(e) => {
+              setCustomDirection(e.target.value);
+              setUserDirection('');
+            }}
+            placeholder="输入你想要的故事发展方向..."
+            className="w-full px-3 py-2 rounded-lg border border-[var(--border)] bg-[var(--paper)] text-[var(--ink)] placeholder-[var(--muted)] focus:outline-none focus:ring-2 focus:ring-[var(--gold)] focus:border-transparent"
+          />
+        </div>
+
+        <div className="flex gap-3">
+          <button
+            onClick={() => setShowBranchDialog(false)}
+            className="flex-1 px-4 py-2 rounded-lg border border-[var(--border)] text-[var(--muted)] hover:text-[var(--ink)] transition-colors"
+          >
+            取消
+          </button>
+          <button
+            onClick={confirmBranch}
+            className="flex-1 px-4 py-2 bg-gradient-to-r from-[var(--accent)] to-red-700 text-white rounded-lg hover:opacity-90 transition-opacity"
+          >
+            生成分叉
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
   return (
     <div className="min-h-screen" style={{ background: 'var(--paper)' }}>
       {/* 顶部导航 */}
@@ -150,10 +302,60 @@ export default function StoryDetailPage({ params }: { params: { id: string } }) 
           <Link href="/" className="text-sm text-[var(--muted)] hover:text-[var(--ink)] transition-colors flex items-center gap-1">
             ← 故事列表
           </Link>
-          <h1 className="text-sm font-bold text-[var(--ink)] tracking-wider">{story.title}</h1>
-          <span className="w-16" />
+          <div className="flex items-center gap-3">
+            {/* 分支路径显示 */}
+            <div className="text-sm">
+              <div className="flex items-center gap-1 text-[var(--muted)]">
+                <span>当前路径:</span>
+                <span className="text-[var(--gold)] font-medium">
+                  {getCurrentBranchPath().join(' → ')}
+                </span>
+              </div>
+            </div>
+            <h1 className="text-sm font-bold text-[var(--ink)] tracking-wider">{story.title}</h1>
+          </div>
         </div>
       </nav>
+
+      {/* 分支切换栏 */}
+      {branches.length > 0 && (
+        <div className="sticky top-16 z-10 backdrop-blur-sm border-b border-[var(--border)]" style={{ background: 'rgba(250,246,240,0.95)' }}>
+          <div className="max-w-3xl mx-auto px-6 py-3">
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                onClick={() => switchBranch('main')}
+                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                  currentBranchId === 'main'
+                    ? 'bg-[var(--gold)] text-[var(--paper)]'
+                    : 'bg-[var(--border)] text-[var(--muted)] hover:bg-[var(--gold)]/20'
+                }`}
+              >
+                主线
+              </button>
+              {branches.map((branch) => {
+                const segment = segments.find(s => s.id === branch.sourceSegmentId);
+                const segmentTitle = segment?.title || '段落';
+                return (
+                  <button
+                    key={branch.id}
+                    onClick={() => switchBranch(branch.id, branch.title)}
+                    className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                      currentBranchId === branch.id
+                        ? 'bg-[var(--accent)] text-white'
+                        : 'bg-[var(--border)] text-[var(--muted)] hover:bg-[var(--accent)]/20'
+                    }`}
+                    title={branch.userDirection}
+                  >
+                    <span className="truncate max-w-32">
+                      {segmentTitle} → {branch.userDirection || branch.title}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 故事标题区 */}
       <div className="max-w-3xl mx-auto px-6 pt-12 pb-8 text-center">
@@ -188,6 +390,20 @@ export default function StoryDetailPage({ params }: { params: { id: string } }) 
 
                 {/* 段落卡片 */}
                 <div className="rounded-lg border border-[var(--border)] bg-white p-6 shadow-sm">
+                  {/* 分支标识 */}
+                  {seg.branchId !== 'main' && (
+                    <div className="mb-3 flex items-center gap-2">
+                      <span className="text-xs px-2 py-1 bg-[var(--accent)]/10 text-[var(--accent)] rounded-full border border-[var(--accent)]/30">
+                        分支
+                      </span>
+                      {seg.branchId && branches.find(b => b.id === seg.branchId)?.userDirection && (
+                        <span className="text-xs text-[var(--muted)]">
+                          {branches.find(b => b.id === seg.branchId)?.userDirection}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                  
                   {seg.title && (
                     <h3 className="text-lg font-bold text-[var(--ink)] mb-3 flex items-center gap-2">
                       <span className="text-[var(--gold)]">·</span>
@@ -260,6 +476,9 @@ export default function StoryDetailPage({ params }: { params: { id: string } }) 
           </div>
         )}
       </div>
+
+      {/* Branch Dialog */}
+      {showBranchDialog && <BranchDialog />}
     </div>
   );
 }

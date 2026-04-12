@@ -1,12 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-
-// @ts-ignore
-const { storiesStore, segmentsStore } = require('@/lib/simple-db');
+import { storiesStore, segmentsStore, getSegmentsByBranch } from '@/lib/simple-db';
 
 export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
   try {
     const { id: storyId } = params;
-    const { segmentId } = await request.json();
+    const { segmentId, branchId = 'main' } = await request.json();
 
     if (!storyId || !segmentId) {
       return NextResponse.json({ error: '缺少参数' }, { status: 400 });
@@ -20,9 +18,11 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     const currentSegment = segments.find((s: any) => s.id === segmentId && s.storyId === storyId);
     if (!currentSegment) return NextResponse.json({ error: '段落不存在' }, { status: 404 });
 
-    const prevSegments = segments
-      .filter((s: any) => s.storyId === storyId && s.order <= currentSegment.order)
-      .sort((a: any, b: any) => a.order - b.order);
+    // 获取当前分支的所有段落作为上下文
+    const branchSegments = await getSegmentsByBranch(branchId);
+    const prevSegments = branchSegments.filter((s: any) => 
+      new Date(s.createdAt) <= new Date(currentSegment.createdAt)
+    ).sort((a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
     const contextSummary = prevSegments.map((s: any) =>
       `${s.title ? `【${s.title}】` : ''}${s.content}`
@@ -36,9 +36,10 @@ ${contextSummary}
 
 请续写下一段（150-300字），保持古典文学风格，与前文情节连续。`;
 
-    const baseUrl = process.env.AI_BASE_URL || 'https://api.openai.com/v1';
+    // 使用正确的 API URL
+    const baseUrl = process.env.AI_BASE_URL || 'https://open.bigmodel.cn/api/paas/v4';
     const apiKey = process.env.AI_API_KEY || '';
-    const model = process.env.AI_MODEL || 'gpt-3.5-turbo';
+    const model = process.env.AI_MODEL || 'glm-5.1';
 
     const aiResponse = await fetch(`${baseUrl}/chat/completions`, {
       method: 'POST',
@@ -92,6 +93,7 @@ ${contextSummary}
 
               try {
                 const parsed = JSON.parse(data);
+                // 对于 glm-5.1，需要从 choices[0].delta.content 获取内容
                 const content = parsed.choices?.[0]?.delta?.content;
                 if (content) {
                   fullContent += content;
@@ -103,16 +105,15 @@ ${contextSummary}
 
           // Save the completed segment
           const allSegments = await segmentsStore.load();
-          const maxOrder = Math.max(...allSegments.filter((s: any) => s.storyId === storyId).map((s: any) => s.order || 0), 0);
 
           const newSegment = {
             id: `seg_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
             storyId,
             title: currentSegment.isBranchPoint ? '分叉发展' : '故事续写',
             content: fullContent,
-            order: maxOrder + 1,
             isBranchPoint: false,
-            parentBranchId: currentSegment.isBranchPoint ? segmentId : undefined,
+            branchId: branchId, // 继续当前分支
+            parentSegmentId: segmentId, // 父段落为当前段落
             imageUrls: [],
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString()

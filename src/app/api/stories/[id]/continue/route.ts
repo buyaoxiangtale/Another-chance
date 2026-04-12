@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-
-// @ts-ignore
-const { storiesStore, segmentsStore } = require('@/lib/simple-db');
+import { storiesStore, segmentsStore, getSegmentsByBranch } from '@/lib/simple-db';
 
 async function callAI(prompt: string): Promise<string> {
   const baseUrl = process.env.AI_BASE_URL || 'https://api.openai.com/v1';
@@ -37,7 +35,7 @@ async function callAI(prompt: string): Promise<string> {
 export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
   try {
     const { id: storyId } = params;
-    const { segmentId } = await request.json();
+    const { segmentId, branchId = 'main' } = await request.json();
 
     if (!storyId || !segmentId) {
       return NextResponse.json({ error: '缺少参数' }, { status: 400 });
@@ -51,10 +49,11 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     const currentSegment = segments.find((s: any) => s.id === segmentId && s.storyId === storyId);
     if (!currentSegment) return NextResponse.json({ error: '段落不存在' }, { status: 404 });
 
-    // Build context
-    const prevSegments = segments
-      .filter((s: any) => s.storyId === storyId && s.order <= currentSegment.order)
-      .sort((a: any, b: any) => a.order - b.order);
+    // 获取当前分支的所有段落作为上下文
+    const branchSegments = await getSegmentsByBranch(branchId);
+    const prevSegments = branchSegments.filter((s: any) => 
+      new Date(s.createdAt) <= new Date(currentSegment.createdAt)
+    ).sort((a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
     const contextSummary = prevSegments.map((s: any) =>
       `${s.title ? `【${s.title}】` : ''}${s.content}`
@@ -70,16 +69,14 @@ ${contextSummary}
 
     const aiResponse = await callAI(prompt);
 
-    const maxOrder = Math.max(...segments.filter((s: any) => s.storyId === storyId).map((s: any) => s.order || 0), 0);
-
     const newSegment = {
       id: `seg_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
       storyId,
       title: currentSegment.isBranchPoint ? '分叉发展' : '故事续写',
       content: aiResponse,
-      order: maxOrder + 1,
       isBranchPoint: false,
-      parentBranchId: currentSegment.isBranchPoint ? segmentId : undefined,
+      branchId: branchId, // 继续当前分支
+      parentSegmentId: segmentId, // 父段落为当前段落
       imageUrls: [],
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()

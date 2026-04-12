@@ -13,9 +13,9 @@
 ## 执行检查清单
 
 ### Phase 1: 项目初始化
-- [ ] P1-1: 初始化 Next.js 14 项目 (TypeScript + TailwindCSS)
-- [ ] P1-2: 配置 Prisma + SQLite 数据库 schema
-- [ ] P1-3: 创建基础目录结构 (src/app, src/lib, src/components, src/types)
+- [x] P1-1: 初始化 Next.js 14 项目 (TypeScript + TailwindCSS)
+- [x] P1-2: 配置 Prisma + SQLite 数据库 schema
+- [x] P1-3: 创建基础目录结构 (src/app, src/lib, src/components, src/types)
 
 ### Phase 2: 数据模型与核心逻辑
 - [ ] P2-1: 设计并实现 Story (故事主线) 数据模型

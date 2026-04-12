@@ -1,0 +1,72 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+// 故事主线模型
+model Story {
+  id              String   @id @default(cuid())
+  title           String
+  description     String?
+  author          String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  // 关联关系
+  segments        StorySegment[]
+  branches        StoryBranch[]
+  rootSegment     StorySegment? @relation("StoryRoot", fields: [rootSegmentId], references: [id])
+  
+  rootSegmentId   String?
+  
+  @@map("stories")
+}
+
+// 故事段落模型
+model StorySegment {
+  id          String   @id @default(cuid())
+  title       String?
+  content     String
+  order       Int      @default(0)
+  isBranchPoint Boolean @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  // 关联关系
+  storyId     String
+  story       Story    @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  
+  // 分叉关联
+  branches    StoryBranch[]
+  parentBranchId String?
+  
+  // 图片预留字段
+  imageUrls   String[] @default([])
+  
+  @@map("story_segments")
+}
+
+// 分叉节点模型
+model StoryBranch {
+  id          String   @id @default(cuid())
+  title       String?
+  description String?
+  segmentId   String
+  segment     StorySegment @relation(fields: [segmentId], references: [id])
+  parentStoryId String?
+  parentStory  Story?   @relation("StoryBranches", fields: [parentStoryId], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  // 关联关系
+  segments    StorySegment[]
+  
+  @@map("story_branches")
+}

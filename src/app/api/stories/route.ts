@@ -6,7 +6,7 @@ export async function GET() {
     const stories = await storiesStore.load();
     
     // 按创建时间倒序排列
-    const sortedStories = stories.sort((a, b) => 
+    const sortedStories = stories.sort((a: any, b: any) => 
       new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     );
 

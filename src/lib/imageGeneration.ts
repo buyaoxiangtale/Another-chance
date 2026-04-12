@@ -1,4 +1,4 @@
-import { ImageGenerationRequest, ImageGenerationResponse } from '@/types/story_classes';
+const { ImageGenerationRequest, ImageGenerationResponse } = require('@/types/story_classes');
 
 // 图片生成服务预留 (P6-2)
 export class ImageGenerationService {

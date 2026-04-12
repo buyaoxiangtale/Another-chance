@@ -44,7 +44,7 @@ function HistoryStoryCard({ story, onSelect, isSelected }: HistoryStoryCardProps
     hard: 'bg-red-100 text-red-800'
   };
 
-  const categoryColors = {
+  const categoryColors: { [key: string]: string } = {
     '古代战争': 'bg-blue-100 text-blue-800',
     '宫廷权谋': 'bg-purple-100 text-purple-800',
     '历史悬疑': 'bg-gray-100 text-gray-800',
@@ -530,7 +530,7 @@ export default function CreateStoryPage() {
 
               {customFormVisible && selectedTemplate && (
                 <CustomStoryForm
-                  template={customTemplates.find(t => t.id === selectedTemplate)}
+                  template={customTemplates.find(t => t.id === selectedTemplate) || null}
                   onSubmit={handleCustomStoryCreate}
                   onCancel={handleCustomCancel}
                 />

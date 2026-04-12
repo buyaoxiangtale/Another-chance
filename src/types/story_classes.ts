@@ -100,7 +100,7 @@ class StorySegmentClass implements StorySegment {
     this.parentBranchId = data.parentBranchId;
     this.imageUrls = data.imageUrls || [];
     this.imageMetadata = data.imageMetadata || [];
-    this.hasImages = (data.imageUrls && data.imageUrls.length > 0) || (data.imageMetadata && data.imageMetadata.length > 0);
+    this.hasImages = ((data.imageUrls && data.imageUrls.length > 0) || (data.imageMetadata && data.imageMetadata.length > 0)) || false;
   }
 }
 

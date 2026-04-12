@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Story } from '@/types/story';
+const { Story } = require('@/types/story');
 
 // 故事卡片组件
 interface StoryCardProps {

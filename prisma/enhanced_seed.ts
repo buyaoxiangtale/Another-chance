@@ -1,7 +1,7 @@
-const { storyStore } = require('../src/lib/db');
+const { storyStore: enhancedStoryStore } = require('../src/lib/db');
 
 // 增强的示例历史故事数据
-const sampleStories = [
+const enhancedSampleStories = [
   {
     id: "jingke-1775987358452",
     title: "荆轲刺秦王",
@@ -23,7 +23,7 @@ const sampleStories = [
 ];
 
 // 荆轲刺秦王的完整故事段落数据（包含多个分支点）
-const jingkeSegments = [
+const enhancedJingkeSegments = [
   // 第一段：背景和准备
   {
     title: "燕国密谋",
@@ -90,7 +90,7 @@ const jingkeSegments = [
 ];
 
 // 赤壁之战的完整故事段落数据（包含多个分支点）
-const chibiSegments = [
+const enhancedChibiSegments = [
   // 第一段：曹操南下
   {
     title: "曹军压境",
@@ -157,7 +157,7 @@ const chibiSegments = [
 ];
 
 // 玄武门之变的完整故事段落数据（包含多个分支点）
-const xuanwumenSegments = [
+const enhancedXuanwumenSegments = [
   // 第一段：兄弟矛盾
   {
     title: "太子之争",
@@ -224,7 +224,7 @@ const xuanwumenSegments = [
 ];
 
 // 分叉节点数据
-const jingkeBranches = [
+const enhancedJingkeBranches = [
   {
     title: "朝堂刺杀路线",
     description: "在朝堂上刺杀秦王",
@@ -245,7 +245,7 @@ const jingkeBranches = [
   }
 ];
 
-const chibiBranches = [
+const enhancedChibiBranches = [
   {
     title: "火攻方案",
     description: "使用火攻击败曹军",
@@ -266,7 +266,7 @@ const chibiBranches = [
   }
 ];
 
-const xuanwumenBranches = [
+const enhancedXuanwumenBranches = [
   {
     title: "兵变路线",
     description: "玄武门军事政变",
@@ -287,7 +287,7 @@ const xuanwumenBranches = [
   }
 ];
 
-async function seedData() {
+async function enhancedSeedData() {
   console.log('开始填充增强的种子数据...');
 
   // 先清空现有数据
@@ -302,26 +302,26 @@ async function seedData() {
 
   // 创建故事
   console.log('创建故事...');
-  for (const storyData of sampleStories) {
-    const story = await storyStore.createStory(storyData);
+  for (const storyData of enhancedSampleStories) {
+    const story = await enhancedStoryStore.createStory(storyData);
     console.log(`创建故事: ${story.title} (${story.id})`);
   }
 
   // 为每个故事创建段落
   console.log('创建故事段落...');
-  const segmentData = [jingkeSegments, chibiSegments, xuanwumenSegments].flat();
+  const segmentData = [enhancedJingkeSegments, enhancedChibiSegments, enhancedXuanwumenSegments].flat();
   
   for (const segment of segmentData) {
-    await storyStore.createSegment(segment);
+    await enhancedStoryStore.createSegment(segment);
     console.log(`创建段落: ${segment.title} for ${segment.storyId}`);
   }
 
   // 创建分叉节点
   console.log('创建分叉节点...');
-  const branchData = [jingkeBranches, chibiBranches, xuanwumenBranches].flat();
+  const branchData = [enhancedJingkeBranches, enhancedChibiBranches, enhancedXuanwumenBranches].flat();
   
   for (const branch of branchData) {
-    await storyStore.createBranch(branch);
+    await enhancedStoryStore.createBranch(branch);
     console.log(`创建分叉: ${branch.title}`);
   }
 
@@ -330,16 +330,16 @@ async function seedData() {
 
 // 如果直接运行此脚本
 if (require.main === module) {
-  seedData().catch(console.error);
+  enhancedSeedData().catch(console.error);
 }
 
 module.exports = { 
-  seedData, 
-  sampleStories, 
-  jingkeSegments, 
-  chibiSegments, 
-  xuanwumenSegments,
-  jingkeBranches,
-  chibiBranches,
-  xuanwumenBranches
+  enhancedSeedData, 
+  enhancedSampleStories, 
+  enhancedJingkeSegments, 
+  enhancedChibiSegments, 
+  enhancedXuanwumenSegments,
+  enhancedJingkeBranches,
+  enhancedChibiBranches,
+  enhancedXuanwumenBranches
 };

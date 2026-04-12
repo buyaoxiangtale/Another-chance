@@ -1,13 +1,14 @@
-const { storiesStore, segmentsStore, branchesStore } = require('./src/lib/simple-db');
+const { storyStore } = require('./db');
 
 class StoryTreeService {
   // 获取完整的故事树结构
   async getStoryTree(storyId) {
-    const story = (await storiesStore.load()).find(s => s.id === storyId);
+    const story = await storyStore.getStory(storyId);
     if (!story) return null;
 
-    const segments = (await segmentsStore.load()).filter(s => s.storyId === storyId);
-    const branches = (await branchesStore.load()).filter(b => b.parentStoryId === storyId);
+    const segments = await storyStore.getSegmentsByStoryId(storyId);
+    const allBranches = await storyStore.getAllBranches();
+    const branches = allBranches.filter(b => b.parentStoryId === storyId);
 
     // 构建树状结构
     const rootSegment = segments.find(s => s.order === 0);
@@ -75,17 +76,19 @@ class StoryTreeService {
 
   // 获取故事的所有段落（按顺序）
   async getStorySegments(storyId) {
-    const segments = (await segmentsStore.load()).filter(s => s.storyId === storyId);
-    return segments.sort((a, b) => a.order - b.order);
+    const segments = await storyStore.getSegmentsByStoryId(storyId);
+    return segments;
   }
 
   // 获取某个段落的所有分叉
   async getSegmentBranches(segmentId) {
-    const branches = (await branchesStore.load()).filter(b => b.segmentId === segmentId);
+    const allBranches = await storyStore.getAllBranches();
+    const branches = allBranches.filter(b => b.segmentId === segmentId);
     
     const result = [];
     for (const branch of branches) {
-      const branchSegments = (await segmentsStore.load()).filter(s => s.parentBranchId === branch.id);
+      const allSegments = await storyStore.getAllSegments();
+      const branchSegments = allSegments.filter(s => s.parentBranchId === branch.id);
       result.push({
         branch,
         segments: branchSegments.sort((a, b) => a.order - b.order)
@@ -97,36 +100,12 @@ class StoryTreeService {
 
   // 创建新的故事分叉
   async createBranch(branchData) {
-    const branches = await branchesStore.load();
-    
-    const newBranch = {
-      ...branchData,
-      id: Date.now().toString(),
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    };
-    
-    branches.push(newBranch);
-    await branchesStore.save(branches);
-    
-    return newBranch;
+    return await storyStore.createBranch(branchData);
   }
 
   // 创建新的故事段落
   async createSegment(segmentData) {
-    const segments = await segmentsStore.load();
-    
-    const newSegment = {
-      ...segmentData,
-      id: Date.now().toString(),
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    };
-    
-    segments.push(newSegment);
-    await segmentsStore.save(segments);
-    
-    return newSegment;
+    return await storyStore.createSegment(segmentData);
   }
 
   // 获取分叉点后的所有可能发展路径

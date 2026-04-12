@@ -1,6 +1,6 @@
 const fs = require('fs/promises');
 const path = require('path');
-const { Story, StorySegment, StoryBranch } = require('@/types/story');
+const { Story, StorySegment, StoryBranch } = require('@/types/story_classes');
 
 const DATA_DIR = path.join(process.cwd(), 'data');
 
@@ -67,12 +67,21 @@ export class StoryStore {
 
   async createSegment(segment: Omit<StorySegment, 'id' | 'createdAt' | 'updatedAt'>): Promise<StorySegment> {
     const segments = await this.getAllSegments();
-    const newSegment: StorySegment = {
+    // 确保 imageUrls 和 imageMetadata 字段存在
+    const segmentWithDefaults = {
       ...segment,
+      imageUrls: segment.imageUrls || [],
+      imageMetadata: segment.imageMetadata || [],
+      hasImages: (segment.imageUrls && segment.imageUrls.length > 0) || (segment.imageMetadata && segment.imageMetadata.length > 0) || false
+    };
+    
+    const newSegment: StorySegment = {
+      ...segmentWithDefaults,
       id: Date.now().toString(),
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
+    
     segments.push(newSegment);
     await this.saveJsonFile('segments.json', segments);
     return newSegment;

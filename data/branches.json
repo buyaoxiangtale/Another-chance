@@ -1,0 +1,83 @@
+[
+  {
+    "title": "朝堂刺杀路线",
+    "description": "在朝堂上刺杀秦王",
+    "segmentId": "jingke-1775987358452-segment-2",
+    "parentStoryId": "jingke-1775987358452",
+    "id": "1775987984233",
+    "createdAt": "2026-04-12T09:59:44.233Z",
+    "updatedAt": "2026-04-12T09:59:44.233Z"
+  },
+  {
+    "title": "出巡埋伏路线",
+    "description": "在秦王出巡时埋伏",
+    "segmentId": "jingke-1775987358452-segment-2",
+    "parentStoryId": "jingke-1775987358452",
+    "id": "1775987984233",
+    "createdAt": "2026-04-12T09:59:44.233Z",
+    "updatedAt": "2026-04-12T09:59:44.233Z"
+  },
+  {
+    "title": "宠臣接近路线",
+    "description": "通过秦王宠臣接近",
+    "segmentId": "jingke-1775987358452-segment-2",
+    "parentStoryId": "jingke-1775987358452",
+    "id": "1775987984233",
+    "createdAt": "2026-04-12T09:59:44.233Z",
+    "updatedAt": "2026-04-12T09:59:44.233Z"
+  },
+  {
+    "title": "火攻方案",
+    "description": "使用火攻击败曹军",
+    "segmentId": "chibi-1775987358454-segment-2",
+    "parentStoryId": "chibi-1775987358454",
+    "id": "1775987984233",
+    "createdAt": "2026-04-12T09:59:44.233Z",
+    "updatedAt": "2026-04-12T09:59:44.233Z"
+  },
+  {
+    "title": "水淹方案",
+    "description": "利用水攻战术",
+    "segmentId": "chibi-1775987358454-segment-2",
+    "parentStoryId": "chibi-1775987358454",
+    "id": "1775987984233",
+    "createdAt": "2026-04-12T09:59:44.233Z",
+    "updatedAt": "2026-04-12T09:59:44.233Z"
+  },
+  {
+    "title": "坚守方案",
+    "description": "采取防守策略",
+    "segmentId": "chibi-1775987358454-segment-2",
+    "parentStoryId": "chibi-1775987358454",
+    "id": "1775987984233",
+    "createdAt": "2026-04-12T09:59:44.233Z",
+    "updatedAt": "2026-04-12T09:59:44.233Z"
+  },
+  {
+    "title": "兵变路线",
+    "description": "玄武门军事政变",
+    "segmentId": "xuanwumen-1775987358455-segment-2",
+    "parentStoryId": "xuanwumen-1775987358455",
+    "id": "1775987984233",
+    "createdAt": "2026-04-12T09:59:44.233Z",
+    "updatedAt": "2026-04-12T09:59:44.233Z"
+  },
+  {
+    "title": "和平路线",
+    "description": "政治权力交接",
+    "segmentId": "xuanwumen-1775987358455-segment-2",
+    "parentStoryId": "xuanwumen-1775987358455",
+    "id": "1775987984233",
+    "createdAt": "2026-04-12T09:59:44.233Z",
+    "updatedAt": "2026-04-12T09:59:44.233Z"
+  },
+  {
+    "title": "海外流亡",
+    "description": "放弃权力争夺",
+    "segmentId": "xuanwumen-1775987358455-segment-2",
+    "parentStoryId": "xuanwumen-1775987358455",
+    "id": "1775987984234",
+    "createdAt": "2026-04-12T09:59:44.234Z",
+    "updatedAt": "2026-04-12T09:59:44.234Z"
+  }
+]

@@ -1,4 +1,4 @@
-const { storyStore } = require('./src/lib/db');
+const { storiesStore, segmentsStore, branchesStore } = require('./src/lib/simple-db');
 
 // 示例历史故事数据
 const sampleStories = [
@@ -79,13 +79,40 @@ const xuanwumenSegments = [
   }
 ];
 
+async function createStory(storyData) {
+  const stories = await storiesStore.load();
+  const newStory = {
+    ...storyData,
+    id: Date.now().toString(),
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+  stories.push(newStory);
+  await storiesStore.save(stories);
+  return newStory;
+}
+
+async function createSegment(segmentData) {
+  const segments = await segmentsStore.load();
+  const newSegment = {
+    ...segmentData,
+    id: Date.now().toString(),
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    imageUrls: segmentData.imageUrls || []
+  };
+  segments.push(newSegment);
+  await segmentsStore.save(segments);
+  return newSegment;
+}
+
 async function seedData() {
   console.log('开始填充种子数据...');
 
   // 创建故事
   const createdStories = [];
   for (const storyData of sampleStories) {
-    const story = await storyStore.createStory(storyData);
+    const story = await createStory(storyData);
     createdStories.push(story);
     console.log(`创建故事: ${story.title} (${story.id})`);
   }
@@ -108,7 +135,7 @@ async function seedData() {
     }
 
     for (const segment of segments) {
-      await storyStore.createSegment(segment);
+      await createSegment(segment);
       console.log(`创建段落: ${segment.title} for ${story.title}`);
     }
   }

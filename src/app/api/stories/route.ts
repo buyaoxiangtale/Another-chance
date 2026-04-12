@@ -39,7 +39,18 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 生成新故事
+    const stories = await storiesStore.load();
+
+    // 幂等：标题已存在则返回已有故事
+    const existing = stories.find((s: any) => s.title === title);
+    if (existing) {
+      return NextResponse.json({
+        success: true,
+        story: existing,
+        message: '故事已存在'
+      });
+    }
+
     const newStory = {
       id: `story_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       title,
@@ -49,7 +60,6 @@ export async function POST(request: NextRequest) {
       updatedAt: new Date().toISOString()
     };
 
-    const stories = await storiesStore.load();
     stories.push(newStory);
     await storiesStore.save(stories);
 

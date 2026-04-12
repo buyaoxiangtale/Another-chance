@@ -1,0 +1,68 @@
+[
+  {
+    "title": "序幕",
+    "content": "公元前227年，燕国太子丹派遣荆轲前往咸阳刺杀秦王嬴政。荆轲带着樊於期的人头和督亢的地图，携带着淬毒的匕首，踏上了前往秦国的旅程。",
+    "order": 0,
+    "isBranchPoint": false,
+    "storyId": "1775987358452",
+    "imageUrls": [],
+    "id": "1775987358460ygat7ziz3",
+    "createdAt": "2026-04-12T09:49:18.460Z",
+    "updatedAt": "2026-04-12T09:49:18.460Z"
+  },
+  {
+    "title": "面见秦王",
+    "content": "荆轲在咸阳宫中见到了秦王嬴政。他恭敬地献上樊於期的人头和督亢地图。当秦王展开地图时，荆轲趁机抽出匕首，向秦王刺去。",
+    "order": 1,
+    "isBranchPoint": true,
+    "storyId": "1775987358452",
+    "imageUrls": [],
+    "id": "1775987358460rc40baibl",
+    "createdAt": "2026-04-12T09:49:18.460Z",
+    "updatedAt": "2026-04-12T09:49:18.460Z"
+  },
+  {
+    "title": "曹操南下",
+    "content": "东汉末年，曹操统一北方后，率领大军八十万南下，意图一举消灭孙权和刘备，统一天下。",
+    "order": 0,
+    "isBranchPoint": false,
+    "storyId": "1775987358452",
+    "imageUrls": [],
+    "id": "1775987358461u68krddbt",
+    "createdAt": "2026-04-12T09:49:18.461Z",
+    "updatedAt": "2026-04-12T09:49:18.461Z"
+  },
+  {
+    "title": "联军 formed",
+    "content": "孙权和刘备决定联合抗曹。诸葛亮出使江东，说服孙权共同对抗曹操。联军在赤壁一带集结。",
+    "order": 1,
+    "isBranchPoint": true,
+    "storyId": "1775987358452",
+    "imageUrls": [],
+    "id": "1775987358461vilqvh4jb",
+    "createdAt": "2026-04-12T09:49:18.461Z",
+    "updatedAt": "2026-04-12T09:49:18.461Z"
+  },
+  {
+    "title": "兄弟矛盾",
+    "content": "唐朝初年，太子李建成与秦王李世民之间矛盾日益激化。李世民在统一战争中功勋卓著，威胁到太子的地位。",
+    "order": 0,
+    "isBranchPoint": false,
+    "storyId": "1775987358453",
+    "imageUrls": [],
+    "id": "1775987358461mnrsyf3md",
+    "createdAt": "2026-04-12T09:49:18.461Z",
+    "updatedAt": "2026-04-12T09:49:18.461Z"
+  },
+  {
+    "title": "玄武门兵变",
+    "content": "公元626年，李世民在玄武门设下埋伏，杀死了太子李建成和齐王李元吉，逼迫父亲李渊退位。",
+    "order": 1,
+    "isBranchPoint": true,
+    "storyId": "1775987358453",
+    "imageUrls": [],
+    "id": "177598735846156j8qq689",
+    "createdAt": "2026-04-12T09:49:18.461Z",
+    "updatedAt": "2026-04-12T09:49:18.461Z"
+  }
+]

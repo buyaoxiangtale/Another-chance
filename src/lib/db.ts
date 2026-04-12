@@ -1,6 +1,6 @@
-import fs from 'fs/promises';
-import path from 'path';
-import { Story, StorySegment, StoryBranch } from '@/types/story';
+const fs = require('fs/promises');
+const path = require('path');
+const { Story, StorySegment, StoryBranch } = require('@/types/story');
 
 const DATA_DIR = path.join(process.cwd(), 'data');
 

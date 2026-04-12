@@ -18,11 +18,11 @@
 - [x] P1-3: 创建基础目录结构 (src/app, src/lib, src/components, src/types)
 
 ### Phase 2: 数据模型与核心逻辑
-- [ ] P2-1: 设计并实现 Story (故事主线) 数据模型
-- [ ] P2-2: 设计并实现 StoryBranch (分叉节点) 数据模型
-- [ ] P2-3: 设计并实现 StorySegment (故事段落) 数据模型
-- [ ] P2-4: 创建 Prisma seed 脚本，插入示例历史故事数据
-- [ ] P2-5: 实现故事树的递归查询和分叉逻辑
+- [x] P2-1: 设计并实现 Story (故事主线) 数据模型
+- [x] P2-2: 设计并实现 StoryBranch (分叉节点) 数据模型
+- [x] P2-3: 设计并实现 StorySegment (故事段落) 数据模型
+- [x] P2-4: 创建 Prisma seed 脚本，插入示例历史故事数据
+- [x] P2-5: 实现故事树的递归查询和分叉逻辑
 
 ### Phase 3: AI 文本生成
 - [ ] P3-1: 封装 AI API 调用模块 (支持 OpenAI-compatible 接口)

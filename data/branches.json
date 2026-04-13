@@ -1,1 +1,56 @@
-[]
+[
+  {
+    "id": "branch_jk_1",
+    "title": "分叉: 转向外交途径",
+    "sourceSegmentId": "seg_jk_3",
+    "storyId": "story_1_荆轲刺秦王",
+    "userDirection": "转向外交途径",
+    "createdAt": "2026-04-13T07:47:36.648Z",
+    "updatedAt": "2026-04-13T07:47:36.648Z"
+  },
+  {
+    "id": "branch_jk_2",
+    "title": "分叉: 转向外交途径v2",
+    "sourceSegmentId": "seg_jk_3",
+    "storyId": "story_1_荆轲刺秦王",
+    "userDirection": "转向外交途径v2",
+    "createdAt": "2026-04-13T07:49:04.453Z",
+    "updatedAt": "2026-04-13T07:49:04.453Z"
+  },
+  {
+    "id": "branch_xw_1",
+    "title": "权力交接",
+    "sourceSegmentId": "seg_xw_2",
+    "storyId": "story_3_玄武门之变",
+    "userDirection": "政治斗争，和平交接",
+    "createdAt": "2026-04-12T09:59:44.232Z",
+    "updatedAt": "2026-04-12T09:59:44.232Z"
+  },
+  {
+    "id": "branch_xw_2",
+    "title": "异国为王",
+    "sourceSegmentId": "seg_xw_2",
+    "storyId": "story_3_玄武门之变",
+    "userDirection": "放弃皇位，远走他乡",
+    "createdAt": "2026-04-12T09:59:44.232Z",
+    "updatedAt": "2026-04-12T09:59:44.232Z"
+  },
+  {
+    "id": "branch_1776069017852_39wojk",
+    "title": "分叉: 专注内政发展",
+    "sourceSegmentId": "seg_jk_b2_1",
+    "storyId": "story_1_荆轲刺秦王",
+    "userDirection": "专注内政发展",
+    "createdAt": "2026-04-13T08:30:17.852Z",
+    "updatedAt": "2026-04-13T08:30:17.852Z"
+  },
+  {
+    "id": "branch_1776085211499_sjt32i",
+    "title": "分叉: 专注内政发展",
+    "sourceSegmentId": "seg_jk_4",
+    "storyId": "story_1_荆轲刺秦王",
+    "userDirection": "专注内政发展",
+    "createdAt": "2026-04-13T13:00:11.499Z",
+    "updatedAt": "2026-04-13T13:00:11.499Z"
+  }
+]

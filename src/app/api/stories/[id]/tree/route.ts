@@ -1,49 +1,31 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { storiesStore, segmentsStore, branchesStore, getOrderedChain, type StorySegment, type StoryBranch } from '@/lib/simple-db';
 
-// @ts-ignore
-const { storiesStore, segmentsStore, branchesStore } = require('@/lib/simple-db');
+function buildTreeData(segments: StorySegment[], branches: StoryBranch[], storyId: string) {
+  const storySegments = segments.filter(s => s.storyId === storyId);
+  const storyBranches = branches.filter(b => b.storyId === storyId);
 
-// Build a flat list with depth info instead of circular tree
-function buildTreeData(segments: any[], branches: any[], storyId: string) {
-  const storySegments = segments.filter((s: any) => s.storyId === storyId);
-  const storyBranches = branches.filter((b: any) => b.storyId === storyId);
-
-  // Build main line chain
-  const mainSegs = storySegments.filter((s: any) => s.branchId === 'main');
+  // Build main line chain via parentSegmentId
+  const mainSegs = storySegments.filter(s => s.branchId === 'main');
   const mainLine: any[] = [];
-  let current = mainSegs.find((s: any) => !s.parentSegmentId);
+  let current = mainSegs.find(s => !s.parentSegmentId);
   const visited = new Set<string>();
 
   while (current && !visited.has(current.id)) {
     visited.add(current.id);
     mainLine.push({ ...current, children: [] as any[] });
-    current = mainSegs.find((s: any) => s.parentSegmentId === current.id);
+    current = mainSegs.find(s => s.parentSegmentId === current!.id);
   }
 
   // Attach branches to main line nodes
   for (const branch of storyBranches) {
-    const sourceIdx = mainLine.findIndex((s: any) => s.id === branch.sourceSegmentId);
+    const sourceIdx = mainLine.findIndex(s => s.id === branch.sourceSegmentId);
     if (sourceIdx === -1) continue;
 
-    // Build branch chain
-    const branchSegs = storySegments
-      .filter((s: any) => s.branchId === branch.id)
-      .sort((a: any, b: any) => {
-        // Follow parentSegmentId chain
-        let depth = 0;
-        let cur: any = a;
-        const aRoot = a.id;
-        while (cur.parentSegmentId) {
-          if (cur.parentSegmentId === branch.sourceSegmentId) break;
-          cur = storySegments.find((s: any) => s.id === cur.parentSegmentId);
-          if (!cur) break;
-          depth++;
-        }
-        return depth;
-      });
-
+    // Build branch chain via parentSegmentId
+    const branchSegs = storySegments.filter(s => s.branchId === branch.id);
     const branchChain: any[] = [];
-    let bCur = branchSegs.find((s: any) => s.parentSegmentId === branch.sourceSegmentId);
+    let bCur = branchSegs.find(s => s.parentSegmentId === branch.sourceSegmentId);
     const bVisited = new Set<string>();
 
     while (bCur && !bVisited.has(bCur.id)) {
@@ -54,7 +36,7 @@ function buildTreeData(segments: any[], branches: any[], storyId: string) {
         isBranch: true,
         children: []
       });
-      bCur = branchSegs.find((s: any) => s.parentSegmentId === bCur.id);
+      bCur = branchSegs.find(s => s.parentSegmentId === bCur!.id);
     }
 
     if (branchChain.length > 0) {

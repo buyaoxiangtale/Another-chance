@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { storiesStore, segmentsStore, getSegmentsByBranch } from '@/lib/simple-db';
+import { storiesStore, segmentsStore, getOrderedChain, type StorySegment } from '@/lib/simple-db';
 
 async function callAI(prompt: string): Promise<string> {
   const baseUrl = process.env.AI_BASE_URL || 'https://api.openai.com/v1';
@@ -35,9 +35,9 @@ async function callAI(prompt: string): Promise<string> {
 export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
   try {
     const { id: storyId } = params;
-    const { segmentId, branchId = 'main' } = await request.json();
+    const { branchId = 'main' } = await request.json();
 
-    if (!storyId || !segmentId) {
+    if (!storyId) {
       return NextResponse.json({ error: '缺少参数' }, { status: 400 });
     }
 
@@ -45,17 +45,15 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     const story = stories.find((s: any) => s.id === storyId);
     if (!story) return NextResponse.json({ error: '故事不存在' }, { status: 404 });
 
-    const segments = await segmentsStore.load();
-    const currentSegment = segments.find((s: any) => s.id === segmentId && s.storyId === storyId);
-    if (!currentSegment) return NextResponse.json({ error: '段落不存在' }, { status: 404 });
+    // Get ordered chain to find tail segment
+    const chain = await getOrderedChain(storyId, branchId);
+    if (chain.length === 0) {
+      return NextResponse.json({ error: '该分支没有段落' }, { status: 404 });
+    }
+    const tailSegment = chain[chain.length - 1];
 
-    // 获取当前分支的所有段落作为上下文
-    const branchSegments = await getSegmentsByBranch(branchId);
-    const prevSegments = branchSegments.filter((s: any) => 
-      new Date(s.createdAt) <= new Date(currentSegment.createdAt)
-    ).sort((a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-
-    const contextSummary = prevSegments.map((s: any) =>
+    // Build context from the ordered chain
+    const contextSummary = chain.map((s: StorySegment) =>
       `${s.title ? `【${s.title}】` : ''}${s.content}`
     ).join('\n');
 
@@ -69,14 +67,15 @@ ${contextSummary}
 
     const aiResponse = await callAI(prompt);
 
-    const newSegment = {
+    const segments = await segmentsStore.load();
+    const newSegment: StorySegment = {
       id: `seg_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
       storyId,
-      title: currentSegment.isBranchPoint ? '分叉发展' : '故事续写',
+      title: '故事续写',
       content: aiResponse,
       isBranchPoint: false,
-      branchId: branchId, // 继续当前分支
-      parentSegmentId: segmentId, // 父段落为当前段落
+      branchId,
+      parentSegmentId: tailSegment.id,
       imageUrls: [],
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()

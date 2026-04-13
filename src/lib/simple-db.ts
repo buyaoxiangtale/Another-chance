@@ -3,7 +3,6 @@ import path from 'path';
 
 const DATA_DIR = path.join(process.cwd(), 'data');
 
-// 确保数据目录存在
 async function ensureDataDir() {
   try {
     await fs.access(DATA_DIR);
@@ -12,7 +11,6 @@ async function ensureDataDir() {
   }
 }
 
-// 简单的 JSON 文件存储
 class SimpleStore<T> {
   constructor(private filename: string) {
     this.dataPath = path.join(DATA_DIR, filename);
@@ -74,50 +72,66 @@ const storiesStore = new SimpleStore<Story>('stories.json');
 const segmentsStore = new SimpleStore<StorySegment>('segments.json');
 const branchesStore = new SimpleStore<StoryBranch>('branches.json');
 
-// 新增辅助方法
-async function getSegmentsByBranch(branchId: string): Promise<StorySegment[]> {
+// Get ordered chain for a branch by following parentSegmentId links
+async function getOrderedChain(storyId: string, branchId: string): Promise<StorySegment[]> {
   const segments = await segmentsStore.load();
-  return segments.filter(segment => segment.branchId === branchId)
-    .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+  const storySegments = segments.filter(s => s.storyId === storyId && s.branchId === branchId);
+
+  if (branchId === 'main') {
+    // Main branch: start from root (no parentSegmentId)
+    const chain: StorySegment[] = [];
+    let current = storySegments.find(s => !s.parentSegmentId);
+    const visited = new Set<string>();
+    while (current && !visited.has(current.id)) {
+      visited.add(current.id);
+      chain.push(current);
+      current = storySegments.find(s => s.parentSegmentId === current!.id);
+    }
+    return chain;
+  } else {
+    // Non-main branch: start from the segment whose parent is the sourceSegmentId
+    const branches = await branchesStore.load();
+    const branch = branches.find(b => b.id === branchId);
+    if (!branch) return [];
+
+    const chain: StorySegment[] = [];
+    let current = storySegments.find(s => s.parentSegmentId === branch.sourceSegmentId);
+    const visited = new Set<string>();
+    while (current && !visited.has(current.id)) {
+      visited.add(current.id);
+      chain.push(current);
+      current = storySegments.find(s => s.parentSegmentId === current!.id);
+    }
+    return chain;
+  }
 }
 
-async function getMainBranchSegments(storyId: string): Promise<StorySegment[]> {
-  const segments = await segmentsStore.load();
-  return segments.filter(segment => 
-    segment.storyId === storyId && segment.branchId === 'main'
-  ).sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+// Get the tail segment of a branch chain
+async function getTailSegment(storyId: string, branchId: string): Promise<StorySegment | null> {
+  const chain = await getOrderedChain(storyId, branchId);
+  return chain.length > 0 ? chain[chain.length - 1] : null;
 }
 
-async function getChildrenSegments(parentSegmentId: string): Promise<StorySegment[]> {
+// Get all segments for a story
+async function getStorySegments(storyId: string): Promise<StorySegment[]> {
   const segments = await segmentsStore.load();
-  return segments.filter(segment => segment.parentSegmentId === parentSegmentId)
-    .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+  return segments.filter(s => s.storyId === storyId);
 }
 
-async function getBranchStory(storyId: string): Promise<any[]> {
+// Get branches for a story
+async function getStoryBranches(storyId: string): Promise<StoryBranch[]> {
   const branches = await branchesStore.load();
-  const segments = await segmentsStore.load();
-  
-  const storyBranches = branches.filter(branch => branch.storyId === storyId);
-  
-  // 为每个分支添加段落信息
-  return storyBranches.map(branch => ({
-    ...branch,
-    segments: segments.filter(segment => 
-      segment.storyId === storyId && 
-      (branch.id === segment.branchId || segment.branchId === 'main')
-    ).sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
-  }));
+  return branches.filter(b => b.storyId === storyId);
 }
 
 export {
   storiesStore,
   segmentsStore,
   branchesStore,
-  getSegmentsByBranch,
-  getMainBranchSegments,
-  getChildrenSegments,
-  getBranchStory,
+  getOrderedChain,
+  getTailSegment,
+  getStorySegments,
+  getStoryBranches,
   type Story,
   type StorySegment,
   type StoryBranch

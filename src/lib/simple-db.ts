@@ -1,7 +1,8 @@
 import fs from 'fs/promises';
 import path from 'path';
+import type { Character, HistoricalReference, DirectorState } from '../types/story';
 
-const DATA_DIR = path.join(process.cwd(), 'data');
+export const DATA_DIR = path.join(process.cwd(), 'data');
 
 async function ensureDataDir() {
   try {
@@ -42,6 +43,10 @@ interface Story {
   createdAt: string;
   updatedAt: string;
   rootSegmentId?: string;
+  // C1: 1.6 扩展
+  era?: string;
+  genre?: string;
+  characterIds?: string[];
 }
 
 interface StorySegment {
@@ -55,6 +60,12 @@ interface StorySegment {
   branchId: string;
   parentSegmentId?: string;
   imageUrls: string[];
+  // C1: 1.5 扩展
+  timeline?: any;
+  characterIds?: string[];
+  historicalReferences?: any[];
+  narrativePace?: 'rush' | 'detailed' | 'pause' | 'summary';
+  mood?: string;
 }
 
 interface StoryBranch {
@@ -64,6 +75,8 @@ interface StoryBranch {
   sourceSegmentId: string;
   storyId: string;
   userDirection: string;
+  characterStateSnapshot?: any;
+  forkTimeline?: any;
   createdAt: string;
   updatedAt: string;
 }
@@ -124,10 +137,18 @@ async function getStoryBranches(storyId: string): Promise<StoryBranch[]> {
   return branches.filter(b => b.storyId === storyId);
 }
 
+// C7: 新增 stores
+const charactersStore = new SimpleStore<Character>('characters.json');
+const historicalReferencesStore = new SimpleStore<HistoricalReference>('historical-references.json');
+const directorStatesStore = new SimpleStore<DirectorState>('director-states.json');
+
 export {
   storiesStore,
   segmentsStore,
   branchesStore,
+  charactersStore,
+  historicalReferencesStore,
+  directorStatesStore,
   getOrderedChain,
   getTailSegment,
   getStorySegments,
@@ -136,3 +157,5 @@ export {
   type StorySegment,
   type StoryBranch
 };
+
+export { SimpleStore, ensureDataDir };

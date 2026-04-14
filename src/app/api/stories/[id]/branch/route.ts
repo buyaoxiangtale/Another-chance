@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { storiesStore, segmentsStore, branchesStore, getOrderedChain, type StorySegment } from '@/lib/simple-db';
+import { characterManager } from '@/lib/character-engine';
 
 export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
   try {
@@ -21,6 +22,14 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     // Generate branch ID
     const branchId = `branch_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
 
+    // Snapshot character states at fork point
+    let characterStateSnapshot: any = undefined;
+    try {
+      characterStateSnapshot = await characterManager.snapshotCharacterStates(storyId, 'main', segmentId);
+    } catch (e) {
+      console.warn('[branch] 角色快照失败（非致命）:', e);
+    }
+
     // Create branch record
     const newBranch = {
       id: branchId,
@@ -28,6 +37,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       sourceSegmentId: segmentId,
       storyId,
       userDirection,
+      characterStateSnapshot,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };

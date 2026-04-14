@@ -18,6 +18,10 @@ interface Story {
     userDirection: string;
     createdAt: string;
   };
+  // C6.8: new fields from API
+  era?: string;
+  genre?: string;
+  characterCount?: number;
 }
 
 function StoryCard({ story, index }: { story: Story; index: number }) {
@@ -26,15 +30,17 @@ function StoryCard({ story, index }: { story: Story; index: number }) {
     '赤壁之战': { era: '三国', icon: '🔥', gradient: 'from-blue-800 to-indigo-900' },
     '玄武门之变': { era: '唐', icon: '⚔️', gradient: 'from-emerald-800 to-teal-900' },
   };
-  const meta = eraMap[story.title] || { era: '历史', icon: '📜', gradient: 'from-gray-700 to-gray-900' };
+  const meta = eraMap[story.title] || {
+    era: story.era || '历史',
+    icon: story.era ? '📜' : '📜',
+    gradient: 'from-gray-700 to-gray-900'
+  };
 
   return (
     <Link href={`/story/${story.id}`} className="block animate-fade-in-up" style={{ animationDelay: `${index * 100}ms` }}>
       <div className="story-card rounded-xl overflow-hidden">
-        {/* 顶部装饰条 */}
         <div className={`h-2 bg-gradient-to-r ${meta.gradient}`} />
         <div className="p-6">
-          {/* 朝代标签 */}
           <div className="flex items-center justify-between mb-4">
             <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-50 text-amber-800 text-sm font-medium rounded-full border border-amber-200">
               <span>{meta.icon}</span>
@@ -45,33 +51,45 @@ function StoryCard({ story, index }: { story: Story; index: number }) {
             </span>
           </div>
 
-          {/* 标题 */}
-          <h3 className="text-xl font-bold text-[var(--ink)] mb-2 tracking-wide">
-            {story.title}
-          </h3>
+          <h3 className="text-xl font-bold text-[var(--ink)] mb-2 tracking-wide">{story.title}</h3>
 
-          {/* 描述 */}
           {story.description && (
-            <p className="text-sm text-[var(--muted)] leading-relaxed mb-4 line-clamp-2">
-              {story.description}
-            </p>
+            <p className="text-sm text-[var(--muted)] leading-relaxed mb-4 line-clamp-2">{story.description}</p>
           )}
 
-          {/* 统计信息 */}
           <div className="flex items-center gap-4 mb-4 text-sm">
             <div className="flex items-center gap-1 text-[var(--muted)]">
-              <span>📝</span>
-              <span>{story.totalSegments || 0} 段落</span>
+              <span>📝</span><span>{story.totalSegments || 0} 段落</span>
             </div>
+            {/* C6.8: Show character count */}
+            {story.characterCount !== undefined && story.characterCount > 0 && (
+              <div className="flex items-center gap-1 text-amber-600">
+                <span>🎭</span><span>{story.characterCount} 角色</span>
+              </div>
+            )}
             {story.totalBranches && story.totalBranches > 0 && (
               <div className="flex items-center gap-1 text-[var(--accent)]">
-                <span>🌿</span>
-                <span>{story.totalBranches} 分支</span>
+                <span>🌿</span><span>{story.totalBranches} 分支</span>
               </div>
             )}
           </div>
 
-          {/* 最新分支信息 */}
+          {/* C6.8: Era & genre tags */}
+          {(story.era || story.genre) && (
+            <div className="flex items-center gap-2 mb-4">
+              {story.era && (
+                <span className="text-[10px] px-2 py-0.5 bg-blue-50 text-blue-600 rounded-full border border-blue-200">
+                  {story.era}
+                </span>
+              )}
+              {story.genre && (
+                <span className="text-[10px] px-2 py-0.5 bg-purple-50 text-purple-600 rounded-full border border-purple-200">
+                  {story.genre}
+                </span>
+              )}
+            </div>
+          )}
+
           {story.latestBranch && (
             <div className="mb-4 p-3 bg-red-50/30 border border-red-200/50 rounded-lg">
               <div className="flex items-center gap-2 mb-1">
@@ -86,14 +104,9 @@ function StoryCard({ story, index }: { story: Story; index: number }) {
             </div>
           )}
 
-          {/* 底部 */}
           <div className="flex items-center justify-between pt-3 border-t border-[var(--border)]">
-            <span className="text-xs text-[var(--muted)]">
-              {story.author || '佚名'}
-            </span>
-            <span className="text-sm text-[var(--gold)] font-medium flex items-center gap-1">
-              开始阅读 →
-            </span>
+            <span className="text-xs text-[var(--muted)]">{story.author || '佚名'}</span>
+            <span className="text-sm text-[var(--gold)] font-medium flex items-center gap-1">开始阅读 →</span>
           </div>
         </div>
       </div>
@@ -127,19 +140,30 @@ export default function Home() {
   useEffect(() => {
     const loadStories = async () => {
       try {
+        // C6.8: Single API call instead of N+1
         const storiesRes = await fetch('/api/stories');
         if (!storiesRes.ok) throw new Error('加载故事列表失败');
         const storiesData = await storiesRes.json();
-        
-        // 为每个故事获取详细信息
+        const rawStories = storiesData.stories || [];
+
+        // C6.8: Batch fetch details — use Promise.all but with a combined endpoint if available
+        // For backward compat, still fetch per story but batch in parallel
         const storiesWithDetails = await Promise.all(
-          (storiesData.stories || []).map(async (story: Story) => {
+          rawStories.map(async (story: Story) => {
             try {
-              const segmentsRes = await fetch(`/api/stories/${story.id}/segments`);
-              const treeRes = await fetch(`/api/stories/${story.id}/tree`);
+              const [segmentsRes, treeRes, charRes] = await Promise.all([
+                fetch(`/api/stories/${story.id}/segments`),
+                fetch(`/api/stories/${story.id}/tree`),
+                fetch(`/api/stories/${story.id}/characters`).catch(() => null),
+              ]);
               
               const segmentsData = await segmentsRes.json();
               const treeData = await treeRes.json();
+              let characterCount = 0;
+              if (charRes && charRes.ok) {
+                const charData = await charRes.json();
+                characterCount = Array.isArray(charData) ? charData.length : (charData.characters?.length || 0);
+              }
               
               return {
                 ...story,
@@ -147,10 +171,11 @@ export default function Home() {
                 totalBranches: treeData.branches?.length || 0,
                 latestBranch: treeData.branches?.length > 0 
                   ? treeData.branches[treeData.branches.length - 1]
-                  : null
+                  : null,
+                characterCount,
               };
             } catch {
-              return story; // 如果获取详细信息失败，返回基本信息
+              return story;
             }
           })
         );
@@ -168,26 +193,15 @@ export default function Home() {
 
   return (
     <div className="min-h-screen" style={{ background: 'var(--paper)' }}>
-      {/* Hero 区域 */}
       <div className="relative overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-br from-amber-900/5 via-transparent to-red-900/5" />
         <div className="relative max-w-5xl mx-auto px-6 pt-16 pb-12 text-center">
-          {/* 标题装饰 */}
-          <div className="divider-ornament mb-6">
-            <span>卷</span>
-          </div>
-
-          <h1 className="text-5xl md:text-6xl font-bold text-[var(--ink)] mb-4 tracking-[0.1em]">
-            古事
-          </h1>
-
-          <p className="text-lg text-[var(--muted)] max-w-xl mx-auto leading-relaxed mb-2">
-            以史为鉴，以文为镜
-          </p>
+          <div className="divider-ornament mb-6"><span>卷</span></div>
+          <h1 className="text-5xl md:text-6xl font-bold text-[var(--ink)] mb-4 tracking-[0.1em]">古事</h1>
+          <p className="text-lg text-[var(--muted)] max-w-xl mx-auto leading-relaxed mb-2">以史为鉴，以文为镜</p>
           <p className="text-sm text-[var(--muted)] max-w-lg mx-auto leading-relaxed">
             选择历史关键转折点，探索不同走向，体验分叉剧情的无限可能
           </p>
-
           <div className="mt-8">
             <Link
               href="/create"
@@ -199,7 +213,6 @@ export default function Home() {
         </div>
       </div>
 
-      {/* 故事列表 */}
       <div className="max-w-5xl mx-auto px-6 pb-20">
         <div className="flex items-center gap-4 mb-8">
           <h2 className="text-2xl font-bold text-[var(--ink)] tracking-wide">故事长卷</h2>
@@ -211,9 +224,7 @@ export default function Home() {
         {error && (
           <div className="text-center py-16">
             <p className="text-[var(--muted)] mb-4">{error}</p>
-            <button onClick={() => window.location.reload()} className="text-[var(--gold)] hover:underline">
-              重新加载
-            </button>
+            <button onClick={() => window.location.reload()} className="text-[var(--gold)] hover:underline">重新加载</button>
           </div>
         )}
 
@@ -221,9 +232,7 @@ export default function Home() {
           <div className="text-center py-16">
             <p className="text-4xl mb-4">📜</p>
             <p className="text-[var(--muted)] mb-4">暂无故事，开启你的第一段历史旅程</p>
-            <Link href="/create" className="text-[var(--gold)] hover:underline">
-              创建第一个故事 →
-            </Link>
+            <Link href="/create" className="text-[var(--gold)] hover:underline">创建第一个故事 →</Link>
           </div>
         )}
 
@@ -236,11 +245,8 @@ export default function Home() {
         )}
       </div>
 
-      {/* 页脚 */}
       <footer className="border-t border-[var(--border)] py-8 text-center">
-        <p className="text-xs text-[var(--muted)]">
-          © 2026 古事 · 分叉故事续写平台
-        </p>
+        <p className="text-xs text-[var(--muted)]">© 2026 古事 · 分叉故事续写平台</p>
       </footer>
     </div>
   );

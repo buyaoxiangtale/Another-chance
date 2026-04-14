@@ -59,6 +59,29 @@ const storyTypes = [
   { id: 'original', name: '原创故事', description: '完全原创的分叉故事' }
 ];
 
+// C6.9: Dynasty/era options
+const eraOptions = [
+  { value: '先秦', label: '先秦', icon: '🏛️' },
+  { value: '秦', label: '秦', icon: '🐉' },
+  { value: '汉', label: '汉', icon: '⚔️' },
+  { value: '三国', label: '三国', icon: '🔥' },
+  { value: '晋', label: '晋', icon: '📜' },
+  { value: '南北朝', label: '南北朝', icon: '🏔️' },
+  { value: '隋', label: '隋', icon: '🏗️' },
+  { value: '唐', label: '唐', icon: '👑' },
+  { value: '宋', label: '宋', icon: '🖌️' },
+  { value: '元', label: '元', icon: '🐎' },
+  { value: '明', label: '明', icon: '🏰' },
+  { value: '清', label: '清', icon: '🏮' },
+  { value: '其他', label: '其他', icon: '🌐' },
+];
+
+interface InitialCharacter {
+  name: string;
+  role: string;
+  traits: string;
+}
+
 export default function CreateStoryPage() {
   const router = useRouter();
   const [tab, setTab] = useState<'template' | 'custom'>('template');
@@ -70,6 +93,13 @@ export default function CreateStoryPage() {
   const [customDesc, setCustomDesc] = useState('');
   const [customAuthor, setCustomAuthor] = useState('');
   const [customPrompt, setCustomPrompt] = useState('');
+
+  // C6.9: Era and character fields
+  const [selectedEra, setSelectedEra] = useState('');
+  const [initialCharacters, setInitialCharacters] = useState<InitialCharacter[]>([
+    { name: '', role: 'protagonist', traits: '' },
+  ]);
+  const [showEraPicker, setShowEraPicker] = useState(false);
 
   const handleTemplateCreate = async () => {
     if (!selectedTemplate || !selectedPrompt || creating) return;
@@ -86,7 +116,8 @@ export default function CreateStoryPage() {
           description: `${template.description}\n\n思考方向：${selectedPrompt}`,
           author: '佚名',
           storyType,
-          prompt: selectedPrompt
+          prompt: selectedPrompt,
+          era: template.era,
         })
       });
       if (!res.ok) throw new Error();
@@ -112,7 +143,13 @@ export default function CreateStoryPage() {
           description: customDesc,
           author: customAuthor || '佚名',
           storyType,
-          prompt: customPrompt
+          prompt: customPrompt,
+          era: selectedEra || undefined,
+          characters: initialCharacters.filter(c => c.name.trim()).map(c => ({
+            name: c.name,
+            role: c.role,
+            traits: c.traits.split(/[,，、]/).filter(Boolean),
+          })),
         })
       });
       if (!res.ok) throw new Error();
@@ -125,28 +162,36 @@ export default function CreateStoryPage() {
     }
   };
 
+  const addCharacter = () => {
+    setInitialCharacters([...initialCharacters, { name: '', role: 'supporting', traits: '' }]);
+  };
+
+  const removeCharacter = (idx: number) => {
+    if (initialCharacters.length <= 1) return;
+    setInitialCharacters(initialCharacters.filter((_, i) => i !== idx));
+  };
+
+  const updateCharacter = (idx: number, field: keyof InitialCharacter, value: string) => {
+    const updated = [...initialCharacters];
+    updated[idx] = { ...updated[idx], [field]: value };
+    setInitialCharacters(updated);
+  };
+
   return (
     <div className="min-h-screen" style={{ background: 'var(--paper)' }}>
-      {/* 导航 */}
       <nav className="sticky top-0 z-10 backdrop-blur-sm border-b border-[var(--border)]" style={{ background: 'rgba(250,246,240,0.9)' }}>
         <div className="max-w-4xl mx-auto px-6 py-3">
-          <Link href="/" className="text-sm text-[var(--muted)] hover:text-[var(--ink)] transition-colors">
-            ← 故事列表
-          </Link>
+          <Link href="/" className="text-sm text-[var(--muted)] hover:text-[var(--ink)] transition-colors">← 故事列表</Link>
         </div>
       </nav>
 
       <div className="max-w-4xl mx-auto px-6 pt-12 pb-20">
-        {/* 标题 */}
         <div className="text-center mb-10">
-          <div className="divider-ornament mb-4">
-            <span>笔</span>
-          </div>
+          <div className="divider-ornament mb-4"><span>笔</span></div>
           <h1 className="text-3xl font-bold text-[var(--ink)] tracking-widest mb-2">开启新篇</h1>
           <p className="text-[var(--muted)] text-sm">选择一段历史，或书写你自己的故事</p>
         </div>
 
-        {/* 故事类型选择 */}
         <div className="mb-10">
           <h3 className="text-lg font-bold text-[var(--ink)] mb-4 text-center">选择故事类型</h3>
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
@@ -167,43 +212,30 @@ export default function CreateStoryPage() {
           </div>
         </div>
 
-        {/* Tab 切换 */}
         <div className="flex justify-center mb-10">
           <div className="inline-flex rounded-full border border-[var(--border)] bg-white p-1">
             <button
               onClick={() => { setTab('template'); setSelectedTemplate(null); setSelectedPrompt(''); }}
               className={`px-6 py-2 rounded-full text-sm font-medium transition-all ${
-                tab === 'template'
-                  ? 'bg-[var(--ink)] text-white shadow-sm'
-                  : 'text-[var(--muted)] hover:text-[var(--ink)]'
+                tab === 'template' ? 'bg-[var(--ink)] text-white shadow-sm' : 'text-[var(--muted)] hover:text-[var(--ink)]'
               }`}
-            >
-              模板故事
-            </button>
+            >模板故事</button>
             <button
               onClick={() => setTab('custom')}
               className={`px-6 py-2 rounded-full text-sm font-medium transition-all ${
-                tab === 'custom'
-                  ? 'bg-[var(--ink)] text-white shadow-sm'
-                  : 'text-[var(--muted)] hover:text-[var(--ink)]'
+                tab === 'custom' ? 'bg-[var(--ink)] text-white shadow-sm' : 'text-[var(--muted)] hover:text-[var(--ink)]'
               }`}
-            >
-              自定义创作
-            </button>
+            >自定义创作</button>
           </div>
         </div>
 
-        {/* 模板故事选择 */}
         {tab === 'template' && (
           <div>
             <div className="grid gap-6 md:grid-cols-3">
               {storyTemplates.map((template, i) => (
                 <div
                   key={template.id}
-                  onClick={() => {
-                    setSelectedTemplate(template.id);
-                    setSelectedPrompt(template.prompts[0]);
-                  }}
+                  onClick={() => { setSelectedTemplate(template.id); setSelectedPrompt(template.prompts[0]); }}
                   className={`animate-fade-in-up cursor-pointer rounded-xl overflow-hidden border-2 transition-all ${
                     selectedTemplate === template.id
                       ? 'border-[var(--gold)] shadow-lg scale-[1.02]'
@@ -216,9 +248,7 @@ export default function CreateStoryPage() {
                   </div>
                   <div className="p-5 bg-white">
                     <div className="flex items-center justify-between mb-2">
-                      <span className="text-xs px-2 py-0.5 bg-amber-50 text-amber-700 rounded-full border border-amber-200">
-                        {template.era}
-                      </span>
+                      <span className="text-xs px-2 py-0.5 bg-amber-50 text-amber-700 rounded-full border border-amber-200">{template.era}</span>
                       <span className="text-xs text-[var(--muted)]">{template.time}</span>
                     </div>
                     <h3 className="text-lg font-bold text-[var(--ink)] mb-2">{template.title}</h3>
@@ -228,7 +258,6 @@ export default function CreateStoryPage() {
               ))}
             </div>
 
-            {/* 思考方向选择 */}
             {selectedTemplate && (
               <div className="mt-8 bg-white rounded-xl border border-[var(--border)] p-6">
                 <h4 className="font-bold text-[var(--ink)] mb-4">选择思考方向</h4>
@@ -266,7 +295,6 @@ export default function CreateStoryPage() {
           </div>
         )}
 
-        {/* 自定义创建 */}
         {tab === 'custom' && (
           <div className="max-w-lg mx-auto">
             <div className="bg-white rounded-xl border border-[var(--border)] p-8 shadow-sm">
@@ -292,6 +320,44 @@ export default function CreateStoryPage() {
                     className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] bg-[var(--paper)] text-[var(--ink)] placeholder-[var(--muted)] focus:outline-none focus:ring-2 focus:ring-[var(--gold)] focus:border-transparent transition-all resize-none"
                   />
                 </div>
+
+                {/* C6.9: Era selector */}
+                <div>
+                  <label className="block text-sm font-medium text-[var(--ink)] mb-2">朝代/时代</label>
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setShowEraPicker(!showEraPicker)}
+                      className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] bg-[var(--paper)] text-left flex items-center justify-between hover:border-[var(--gold)]/50 transition-all"
+                    >
+                      <span className={selectedEra ? 'text-[var(--ink)]' : 'text-[var(--muted)]'}>
+                        {selectedEra ? `${eraOptions.find(e => e.value === selectedEra)?.icon} ${selectedEra}` : '选择朝代...'}
+                      </span>
+                      <span className="text-[var(--muted)]">▾</span>
+                    </button>
+                    {showEraPicker && (
+                      <div className="absolute top-full left-0 right-0 mt-1 bg-white rounded-lg border border-[var(--border)] shadow-lg z-10 max-h-60 overflow-y-auto">
+                        <div className="grid grid-cols-4 gap-1 p-2">
+                          {eraOptions.map(era => (
+                            <button
+                              key={era.value}
+                              type="button"
+                              onClick={() => { setSelectedEra(era.value); setShowEraPicker(false); }}
+                              className={`px-3 py-2 rounded-lg text-sm text-left transition-all ${
+                                selectedEra === era.value
+                                  ? 'bg-amber-50 text-amber-800 border border-amber-200'
+                                  : 'hover:bg-gray-50 text-[var(--ink)]'
+                              }`}
+                            >
+                              <span className="mr-1">{era.icon}</span>{era.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
                 <div>
                   <label className="block text-sm font-medium text-[var(--ink)] mb-2">故事类型</label>
                   <select
@@ -304,6 +370,65 @@ export default function CreateStoryPage() {
                     ))}
                   </select>
                 </div>
+
+                {/* C6.9: Initial characters */}
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="block text-sm font-medium text-[var(--ink)]">初始角色</label>
+                    <button
+                      type="button"
+                      onClick={addCharacter}
+                      className="text-xs text-[var(--gold)] hover:text-amber-700 flex items-center gap-1"
+                    >
+                      + 添加角色
+                    </button>
+                  </div>
+                  <div className="space-y-3">
+                    {initialCharacters.map((char, idx) => (
+                      <div key={idx} className="flex gap-2 items-start">
+                        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-amber-500 to-amber-700 flex items-center justify-center text-white text-xs font-bold shrink-0 mt-2">
+                          {char.name ? char.name.charAt(0) : '?'}
+                        </div>
+                        <div className="flex-1 space-y-1.5">
+                          <input
+                            type="text"
+                            value={char.name}
+                            onChange={e => updateCharacter(idx, 'name', e.target.value)}
+                            placeholder="角色名"
+                            className="w-full px-3 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--paper)] text-sm text-[var(--ink)] placeholder-[var(--muted)] focus:outline-none focus:ring-1 focus:ring-[var(--gold)]"
+                          />
+                          <div className="flex gap-2">
+                            <select
+                              value={char.role}
+                              onChange={e => updateCharacter(idx, 'role', e.target.value)}
+                              className="flex-1 px-3 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--paper)] text-sm text-[var(--ink)] focus:outline-none focus:ring-1 focus:ring-[var(--gold)]"
+                            >
+                              <option value="protagonist">主角</option>
+                              <option value="supporting">配角</option>
+                              <option value="antagonist">反派</option>
+                              <option value="narrator">叙述者</option>
+                            </select>
+                            <input
+                              type="text"
+                              value={char.traits}
+                              onChange={e => updateCharacter(idx, 'traits', e.target.value)}
+                              placeholder="性格特征（逗号分隔）"
+                              className="flex-[2] px-3 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--paper)] text-sm text-[var(--ink)] placeholder-[var(--muted)] focus:outline-none focus:ring-1 focus:ring-[var(--gold)]"
+                            />
+                          </div>
+                        </div>
+                        {initialCharacters.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => removeCharacter(idx)}
+                            className="text-gray-400 hover:text-red-500 mt-2 text-sm"
+                          >✕</button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
                 <div>
                   <label className="block text-sm font-medium text-[var(--ink)] mb-2">思考方向/提示词</label>
                   <textarea

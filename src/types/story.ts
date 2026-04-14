@@ -1,4 +1,74 @@
 // 故事相关类型定义
+
+// === 新增类型 (C1: 1.1-1.4, 1.9) ===
+
+export type CharacterRole = 'protagonist' | 'supporting' | 'antagonist' | 'narrator';
+
+export type CharacterRelationship = {
+  targetId: string;
+  relation: string;
+  strength: number; // 0-1
+};
+
+export type CharacterStateEntry = {
+  segmentId: string;
+  state: string;
+};
+
+export type Character = {
+  id: string;
+  name: string;
+  era: string;
+  role: CharacterRole;
+  traits: string[];
+  speechPatterns: string;
+  relationships: CharacterRelationship[];
+  stateHistory: CharacterStateEntry[];
+  coreMotivation: string;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+export type TimelineEvent = {
+  era: string;
+  year: number;
+  season?: string;
+  description: string;
+  narrativeTime: string;
+};
+
+export type HistoricalEntityType = 'person' | 'event' | 'place' | 'artifact';
+
+export type HistoricalReference = {
+  id?: string;
+  entityType: HistoricalEntityType;
+  name: string;
+  wikiUrl?: string;
+  wikiSummary?: string;
+  confidence: number; // 0-1
+  verifiedAt?: string;
+};
+
+export type PacingPace = 'rush' | 'detailed' | 'pause' | 'summary';
+
+export type PacingConfig = {
+  pace: PacingPace;
+  mood?: string;
+  estimatedReadMinutes?: number;
+  maxLinesPerStep?: number;
+};
+
+export type DirectorState = {
+  id?: string;
+  storyId: string;
+  characterStates: Record<string, string>; // characterId -> state description
+  worldVariables: Record<string, string>; // key -> value
+  activeConstraints: string[];
+  updatedAt?: string;
+};
+
+// === 现有类型 (向后兼容) ===
+
 export type Story = {
   id: string;
   title: string;
@@ -7,6 +77,10 @@ export type Story = {
   createdAt: string;
   updatedAt: string;
   rootSegmentId?: string;
+  // C1: 1.6 扩展
+  era?: string;
+  genre?: string;
+  characterIds?: string[];
 };
 
 export type StorySegment = {
@@ -17,35 +91,47 @@ export type StorySegment = {
   createdAt: string;
   updatedAt: string;
   storyId: string;
-  branchId: string; // 所属分支 ID，主线的 branchId 为 "main"
-  parentSegmentId: string; // 父段落 ID（用于构建分支树）
+  branchId: string;
+  parentSegmentId?: string;
   imageUrls: string[];
+  // C1: 1.5 扩展
+  timeline?: TimelineEvent;
+  characterIds?: string[];
+  historicalReferences?: HistoricalReference[];
+  narrativePace?: PacingPace;
+  mood?: string;
 };
 
 export type StoryBranch = {
   id: string;
   title: string;
   description?: string;
-  sourceSegmentId: string; // 从哪个段落分叉出来的
+  sourceSegmentId: string;
   storyId: string;
-  userDirection: string; // 用户输入的分叉方向描述
+  userDirection: string;
   createdAt: string;
   updatedAt: string;
+  // C1: 1.7 扩展
+  characterStateSnapshot?: Record<string, string>;
+  forkTimeline?: TimelineEvent;
 };
 
 // API 请求/响应类型
 export type ContinueStoryRequest = {
   segmentId: string;
-  branchId: string; // 当前分支 ID
+  branchId: string;
   content?: string;
   style?: string;
   characters?: string[];
+  // C1: 1.8 扩展
+  pacingConfig?: PacingConfig;
+  directorOverrides?: Partial<DirectorState>;
 };
 
 export type BranchStoryRequest = {
   segmentId: string;
-  userDirection: string; // 用户输入的分叉方向描述
-  branchTitle?: string; // 分支标题（可选，可为空让 AI 生成）
+  userDirection: string;
+  branchTitle?: string;
 };
 
 export type StoryResponse = {
@@ -75,6 +161,9 @@ class StoryClass {
   createdAt!: string;
   updatedAt!: string;
   rootSegmentId?: string;
+  era?: string;
+  genre?: string;
+  characterIds?: string[];
   constructor(data: Story) { Object.assign(this, data); }
 }
 
@@ -86,9 +175,14 @@ class StorySegmentClass {
   createdAt!: string;
   updatedAt!: string;
   storyId!: string;
-  branchId!: string; // 所属分支 ID，主线的 branchId 为 "main"
-  parentSegmentId!: string; // 父段落 ID（用于构建分支树）
+  branchId!: string;
+  parentSegmentId!: string;
   imageUrls!: string[];
+  timeline?: TimelineEvent;
+  characterIds?: string[];
+  historicalReferences?: HistoricalReference[];
+  narrativePace?: PacingPace;
+  mood?: string;
   constructor(data: StorySegment) { Object.assign(this, data); }
 }
 
@@ -96,11 +190,13 @@ class StoryBranchClass {
   id!: string;
   title!: string;
   description?: string;
-  sourceSegmentId!: string; // 从哪个段落分叉出来的
+  sourceSegmentId!: string;
   storyId!: string;
-  userDirection!: string; // 用户输入的分叉方向描述
+  userDirection!: string;
   createdAt!: string;
   updatedAt!: string;
+  characterStateSnapshot?: Record<string, string>;
+  forkTimeline?: TimelineEvent;
   constructor(data: StoryBranch) { Object.assign(this, data); }
 }
 

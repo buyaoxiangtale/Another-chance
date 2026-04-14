@@ -19,9 +19,14 @@ model Story {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
   
+  // C1: 1.6 扩展
+  era             String?
+  genre           String?
+  
   // 关联关系
   segments        StorySegment[]
   branches        StoryBranch[]
+  characters      Character[]
   rootSegment     StorySegment? @relation("StoryRoot", fields: [rootSegmentId], references: [id])
   
   rootSegmentId   String?
@@ -50,6 +55,15 @@ model StorySegment {
   // 图片预留字段
   imageUrls   String[] @default([])
   
+  // C1: 1.5 扩展
+  timeline    String?   // JSON string of TimelineEvent
+  characterIds String[] @default([])
+  narrativePace String? // rush/detailed/pause/summary
+  mood        String?
+  
+  // C1: 1.10 历史引用关联
+  historicalReferences StorySegmentHistoricalRef[]
+  
   @@map("story_segments")
 }
 
@@ -68,5 +82,58 @@ model StoryBranch {
   // 关联关系
   segments    StorySegment[]
   
+  // C1: 1.7 扩展
+  characterStateSnapshot String? // JSON string of Record<string, string>
+  forkTimeline          String?  // JSON string of TimelineEvent
+  
   @@map("story_branches")
+}
+
+// C1: 1.10 角色模型
+model Character {
+  id              String   @id @default(cuid())
+  name            String
+  era             String
+  role            String   @default("supporting") // protagonist/supporting/antagonist/narrator
+  traits          String[] @default([])
+  speechPatterns  String   @default("")
+  relationships   String   @default("[]") // JSON string of CharacterRelationship[]
+  stateHistory    String   @default("[]") // JSON string of CharacterStateEntry[]
+  coreMotivation  String   @default("")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  storyId         String
+  story           Story    @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  
+  @@map("characters")
+}
+
+// C1: 1.10 历史引用模型
+model HistoricalReference {
+  id            String   @id @default(cuid())
+  entityType    String   // person/event/place/artifact
+  name          String
+  wikiUrl       String?
+  wikiSummary   String?
+  confidence    Float    @default(0.5)
+  verifiedAt    DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  // 多对多关联：段落 <-> 历史引用
+  segments      StorySegmentHistoricalRef[]
+  
+  @@map("historical_references")
+}
+
+// 段落-历史引用 多对多中间表
+model StorySegmentHistoricalRef {
+  segmentId             String
+  segment               StorySegment @relation(fields: [segmentId], references: [id], onDelete: Cascade)
+  historicalReferenceId String
+  historicalReference   HistoricalReference @relation(fields: [historicalReferenceId], references: [id], onDelete: Cascade)
+  
+  @@id([segmentId, historicalReferenceId])
+  @@map("story_segment_historical_refs")
 }

@@ -1,31 +1,21 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
+import CharacterPanel from '@/components/CharacterPanel';
+import TimelineBar from '@/components/TimelineBar';
+import DirectorSidebar from '@/components/DirectorSidebar';
+import PacingControls from '@/components/PacingControls';
+import type { PacingConfig, Character, StorySegment, StoryBranch } from '@/types/story';
 
 interface Story {
   id: string;
   title: string;
   description?: string;
   author?: string;
-}
-
-interface StorySegment {
-  id: string;
-  title?: string;
-  content: string;
-  isBranchPoint: boolean;
-  storyId: string;
-  branchId: string;
-  parentSegmentId?: string;
-  imageUrls: string[];
-}
-
-interface StoryBranch {
-  id: string;
-  title: string;
-  userDirection: string;
-  sourceSegmentId: string;
+  era?: string;
+  genre?: string;
+  characterIds?: string[];
 }
 
 export default function StoryDetailPage({ params }: { params: { id: string } }) {
@@ -45,6 +35,18 @@ export default function StoryDetailPage({ params }: { params: { id: string } }) 
   const [branching, setBranching] = useState(false);
   const [branchStep, setBranchStep] = useState('');
   const [branchPreview, setBranchPreview] = useState('');
+
+  // C6 new state
+  const [showCharacterPanel, setShowCharacterPanel] = useState(false);
+  const [showDirectorSidebar, setShowDirectorSidebar] = useState(false);
+  const [showTimeline, setShowTimeline] = useState(false);
+  const [pacingConfig, setPacingConfig] = useState<PacingConfig>({ pace: 'detailed', maxLinesPerStep: 5 });
+  const [isPaused, setIsPaused] = useState(false);
+  const [suggestedDirections, setSuggestedDirections] = useState<Array<{ icon: string; label: string; desc: string }>>([]);
+  const [displayedLines, setDisplayedLines] = useState<string[]>([]);
+  const [lineStep, setLineStep] = useState(0);
+  const readerRef = useRef<ReadableStreamDefaultReader<Uint8Array> | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
   const loadBranchSegments = useCallback(async (branchId: string) => {
     const segRes = await fetch(`/api/stories/${id}/segments?branchId=${branchId}`);
@@ -86,14 +88,33 @@ export default function StoryDetailPage({ params }: { params: { id: string } }) 
     load();
   }, [id]);
 
-  // Load segments for current branch
   useEffect(() => {
-    if (!loading) {
-      loadBranchSegments(currentBranchId);
-    }
+    if (!loading) loadBranchSegments(currentBranchId);
   }, [currentBranchId, loading, loadBranchSegments]);
 
-  // Find tail segment: the one whose id is not referenced as parentSegmentId by any other segment
+  // C6.6: Streaming with line-level stepping
+  useEffect(() => {
+    if (!newContent) { setDisplayedLines([]); setLineStep(0); return; }
+    const lines = newContent.split('\n').filter(l => l.trim());
+    setDisplayedLines(lines);
+    const max = pacingConfig.maxLinesPerStep || 5;
+    if (!isPaused) {
+      setLineStep(Math.min(lines.length, max));
+    }
+  }, [newContent, isPaused, pacingConfig.maxLinesPerStep]);
+
+  const advanceLines = () => {
+    const max = pacingConfig.maxLinesPerStep || 5;
+    setLineStep(prev => Math.min(prev + max, displayedLines.length));
+  };
+
+  const handlePause = () => setIsPaused(true);
+  const handleResume = () => {
+    setIsPaused(false);
+    const max = pacingConfig.maxLinesPerStep || 5;
+    setLineStep(prev => Math.min(prev + max, displayedLines.length));
+  };
+
   const getTailSegment = () => {
     const childIds = new Set(segments.map(s => s.parentSegmentId).filter(Boolean));
     return segments.find(s => !childIds.has(s.id));
@@ -101,19 +122,24 @@ export default function StoryDetailPage({ params }: { params: { id: string } }) 
 
   const handleContinue = async () => {
     if (continuing) return;
-    
     setContinuing(true);
     setNewContent('');
+    setLineStep(0);
+    setIsPaused(false);
 
     try {
       const res = await fetch(`/api/stories/${id}/stream-continue`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ branchId: currentBranchId })
+        body: JSON.stringify({
+          branchId: currentBranchId,
+          pacingConfig,
+        })
       });
 
       if (!res.ok) throw new Error('续写失败');
       const reader = res.body?.getReader();
+      readerRef.current = reader || null;
       const decoder = new TextDecoder();
       let full = '';
 
@@ -131,37 +157,70 @@ export default function StoryDetailPage({ params }: { params: { id: string } }) 
                 full += parsed.content;
                 setNewContent(full);
               }
+              // C6.6: Handle new SSE event types
+              if (parsed.type === 'line' && parsed.content) {
+                // Line-level event — already handled by content above
+              }
+              if (parsed.type === 'pause') {
+                setIsPaused(true);
+              }
+              if (parsed.type === 'metadata' && parsed.data) {
+                // Could update UI with metadata
+              }
             } catch {}
           }
         }
       }
 
-      // Reload segments
       await loadBranchSegments(currentBranchId);
       await loadTree();
       setNewContent('');
+      setDisplayedLines([]);
     } catch (e) {
       alert('续写失败: ' + (e instanceof Error ? e.message : '请重试'));
     } finally {
       setContinuing(false);
+      readerRef.current = null;
     }
   };
 
+  // C6.7: Dynamic branch directions
   const handleBranch = async (segmentId: string) => {
     setBranchingSegmentId(segmentId);
     setUserDirection('');
     setCustomDirection('');
+
+    // Generate dynamic suggestions based on story context
+    try {
+      const charRes = await fetch(`/api/stories/${id}/characters`);
+      if (charRes.ok) {
+        const chars: Character[] = Array.isArray(await charRes.json()) ? await charRes.json() : [];
+        if (chars.length > 0) {
+          const mainChars = chars.filter(c => c.role === 'protagonist' || c.role === 'antagonist').slice(0, 3);
+          const directions = [
+            { icon: '🗡️', label: `${mainChars[0]?.name || '主角'}采取行动`, desc: `让${mainChars[0]?.name || '主角'}改变策略` },
+            { icon: '🔄', label: '局势急转', desc: '意外事件打破当前格局' },
+            { icon: '🤝', label: '暗中联手', desc: `${mainChars[0]?.name || '主角'}与${mainChars[1]?.name || '对手'}达成合作` },
+            { icon: '🏛️', label: '朝堂博弈', desc: '将冲突转移至更高层面' },
+          ];
+          setSuggestedDirections(directions);
+        }
+      }
+    } catch {
+      setSuggestedDirections([
+        { icon: '🗡️', label: '加强战争策略', desc: '以更精妙的战术改写战局' },
+        { icon: '🤝', label: '转向外交途径', desc: '以谈判和联盟化解危机' },
+        { icon: '🏛️', label: '专注内政发展', desc: '休养生息，积蓄力量' },
+        { icon: '🔄', label: '寻求盟友帮助', desc: '联合他人共同应对挑战' },
+      ]);
+    }
     setShowBranchDialog(true);
   };
 
   const confirmBranch = async () => {
     if (!branchingSegmentId) return;
-    
     const direction = customDirection.trim() || userDirection;
-    if (!direction) {
-      alert('请选择或输入分叉方向');
-      return;
-    }
+    if (!direction) { alert('请选择或输入分叉方向'); return; }
 
     setBranching(true);
     setBranchStep('thinking');
@@ -174,23 +233,17 @@ export default function StoryDetailPage({ params }: { params: { id: string } }) 
       const res = await fetch(`/api/stories/${id}/branch`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          segmentId: branchingSegmentId,
-          userDirection: direction
-        })
+        body: JSON.stringify({ segmentId: branchingSegmentId, userDirection: direction })
       });
       if (!res.ok) throw new Error('分叉失败');
       
       const data = await res.json();
       setBranchStep('saving');
       setBranchPreview(data.segment?.content || '分叉剧情已生成');
-
       await new Promise(r => setTimeout(r, 500));
 
-      // Refresh
       await loadBranchSegments(currentBranchId);
       await loadTree();
-      
       setShowBranchDialog(false);
       setBranchingSegmentId(null);
     } catch (e) {
@@ -204,20 +257,14 @@ export default function StoryDetailPage({ params }: { params: { id: string } }) 
 
   const switchBranch = async (branchId: string) => {
     setCurrentBranchId(branchId);
-    // segments will be loaded via useEffect
   };
 
   const getCurrentBranchPath = () => {
     if (currentBranchId === 'main') return ['主线'];
     const branch = branches.find(b => b.id === currentBranchId);
-    if (branch) {
-      // Find source segment title from main chain - use tree data
-      return [branch.userDirection || branch.title];
-    }
-    return [currentBranchId];
+    return branch ? [branch.userDirection || branch.title] : [currentBranchId];
   };
 
-  // Check how many branches originate from a segment
   const getBranchCountForSegment = (segmentId: string) => {
     return branches.filter(b => b.sourceSegmentId === segmentId).length;
   };
@@ -243,6 +290,8 @@ export default function StoryDetailPage({ params }: { params: { id: string } }) 
       </div>
     );
   }
+
+  const tailSegment = getTailSegment();
 
   const BranchDialog = () => (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
@@ -271,14 +320,12 @@ export default function StoryDetailPage({ params }: { params: { id: string } }) 
                 })}
               </div>
             </div>
-
             {branchPreview && (
               <div className="mt-4 p-4 rounded-lg bg-[var(--paper)] border border-[var(--border)] text-left max-h-40 overflow-y-auto">
                 <p className="text-xs text-[var(--muted)] mb-2">生成预览：</p>
                 <p className="text-sm text-[var(--ink)] prose-chinese">{branchPreview.slice(0, 200)}{branchPreview.length > 200 ? '...' : ''}</p>
               </div>
             )}
-
             <p className="text-sm text-[var(--muted)] mt-4 animate-pulse">
               {branchStep === 'thinking' && '🔮 正在分析故事走向...'}
               {branchStep === 'generating' && '✍️ AI 正在书写分叉剧情，请稍候...'}
@@ -291,12 +338,12 @@ export default function StoryDetailPage({ params }: { params: { id: string } }) 
             <p className="text-sm text-[var(--muted)] mb-4">选择一个方向，或输入你想要的历史走向</p>
             
             <div className="space-y-2 mb-5">
-              {[
+              {(suggestedDirections.length > 0 ? suggestedDirections : [
                 { icon: '🗡️', label: '加强战争策略', desc: '以更精妙的战术改写战局' },
                 { icon: '🤝', label: '转向外交途径', desc: '以谈判和联盟化解危机' },
                 { icon: '🏛️', label: '专注内政发展', desc: '休养生息，积蓄力量' },
                 { icon: '🔄', label: '寻求盟友帮助', desc: '联合他人共同应对挑战' },
-              ].map((option) => (
+              ]).map((option) => (
                 <button
                   key={option.label}
                   onClick={() => { setUserDirection(option.label); setCustomDirection(''); }}
@@ -321,10 +368,7 @@ export default function StoryDetailPage({ params }: { params: { id: string } }) 
               <label className="block text-sm font-medium text-[var(--ink)] mb-2">✦ 自定义方向</label>
               <textarea
                 value={customDirection}
-                onChange={(e) => {
-                  setCustomDirection(e.target.value);
-                  if (e.target.value.trim()) setUserDirection('');
-                }}
+                onChange={(e) => { setCustomDirection(e.target.value); if (e.target.value.trim()) setUserDirection(''); }}
                 placeholder="例：如果荆轲选择不刺秦王，而是劝说秦王..."
                 rows={2}
                 className="w-full px-3 py-2.5 rounded-lg border border-[var(--border)] bg-[var(--paper)] text-[var(--ink)] placeholder-[var(--muted)] focus:outline-none focus:ring-2 focus:ring-[var(--gold)] focus:border-transparent text-sm resize-none"
@@ -332,10 +376,7 @@ export default function StoryDetailPage({ params }: { params: { id: string } }) 
             </div>
 
             <div className="flex gap-3">
-              <button
-                onClick={() => setShowBranchDialog(false)}
-                className="flex-1 px-4 py-2.5 rounded-lg border border-[var(--border)] text-[var(--muted)] hover:text-[var(--ink)] hover:bg-gray-50 transition-all text-sm"
-              >
+              <button onClick={() => setShowBranchDialog(false)} className="flex-1 px-4 py-2.5 rounded-lg border border-[var(--border)] text-[var(--muted)] hover:text-[var(--ink)] hover:bg-gray-50 transition-all text-sm">
                 取消
               </button>
               <button
@@ -358,19 +399,51 @@ export default function StoryDetailPage({ params }: { params: { id: string } }) 
 
   return (
     <div className="min-h-screen" style={{ background: 'var(--paper)' }}>
+      {/* C6 panels */}
+      <CharacterPanel
+        storyId={id}
+        branchId={currentBranchId}
+        segmentId={tailSegment?.id}
+        isOpen={showCharacterPanel}
+        onToggle={() => setShowCharacterPanel(!showCharacterPanel)}
+      />
+      <DirectorSidebar
+        storyId={id}
+        isOpen={showDirectorSidebar}
+        onToggle={() => setShowDirectorSidebar(!showDirectorSidebar)}
+      />
+
       {/* Top nav */}
       <nav className="sticky top-0 z-10 backdrop-blur-sm border-b border-[var(--border)]" style={{ background: 'rgba(250,246,240,0.9)' }}>
         <div className="max-w-3xl mx-auto px-6 py-3 flex items-center justify-between">
-          <Link href="/" className="text-sm text-[var(--muted)] hover:text-[var(--ink)] transition-colors flex items-center gap-1">
-            ← 故事列表
-          </Link>
+          <div className="flex items-center gap-3">
+            <Link href="/" className="text-sm text-[var(--muted)] hover:text-[var(--ink)] transition-colors">
+              ← 故事列表
+            </Link>
+            {/* C6: Panel toggles */}
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setShowCharacterPanel(!showCharacterPanel)}
+                className={`p-1.5 rounded-lg text-xs transition-all ${showCharacterPanel ? 'bg-amber-100 text-amber-700' : 'text-[var(--muted)] hover:bg-gray-100'}`}
+                title="角色面板"
+              >🎭</button>
+              <button
+                onClick={() => setShowDirectorSidebar(!showDirectorSidebar)}
+                className={`p-1.5 rounded-lg text-xs transition-all ${showDirectorSidebar ? 'bg-emerald-100 text-emerald-700' : 'text-[var(--muted)] hover:bg-gray-100'}`}
+                title="导演模式"
+              >🎬</button>
+              <button
+                onClick={() => setShowTimeline(!showTimeline)}
+                className={`p-1.5 rounded-lg text-xs transition-all ${showTimeline ? 'bg-blue-100 text-blue-700' : 'text-[var(--muted)] hover:bg-gray-100'}`}
+                title="时间轴"
+              >⏳</button>
+            </div>
+          </div>
           <div className="flex items-center gap-3">
             <div className="text-sm">
               <div className="flex items-center gap-1 text-[var(--muted)]">
                 <span>当前路径:</span>
-                <span className="text-[var(--gold)] font-medium">
-                  {getCurrentBranchPath().join(' → ')}
-                </span>
+                <span className="text-[var(--gold)] font-medium">{getCurrentBranchPath().join(' → ')}</span>
               </div>
             </div>
             <h1 className="text-sm font-bold text-[var(--ink)] tracking-wider">{story.title}</h1>
@@ -386,21 +459,15 @@ export default function StoryDetailPage({ params }: { params: { id: string } }) 
               <button
                 onClick={() => switchBranch('main')}
                 className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                  currentBranchId === 'main'
-                    ? 'bg-[var(--gold)] text-[var(--paper)]'
-                    : 'bg-[var(--border)] text-[var(--muted)] hover:bg-[var(--gold)]/20'
+                  currentBranchId === 'main' ? 'bg-[var(--gold)] text-[var(--paper)]' : 'bg-[var(--border)] text-[var(--muted)] hover:bg-[var(--gold)]/20'
                 }`}
-              >
-                主线
-              </button>
+              >主线</button>
               {branches.map((branch) => (
                 <button
                   key={branch.id}
                   onClick={() => switchBranch(branch.id)}
                   className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                    currentBranchId === branch.id
-                      ? 'bg-[var(--accent)] text-white'
-                      : 'bg-[var(--border)] text-[var(--muted)] hover:bg-[var(--accent)]/20'
+                    currentBranchId === branch.id ? 'bg-[var(--accent)] text-white' : 'bg-[var(--border)] text-[var(--muted)] hover:bg-[var(--accent)]/20'
                   }`}
                   title={branch.userDirection}
                 >
@@ -413,133 +480,189 @@ export default function StoryDetailPage({ params }: { params: { id: string } }) 
       )}
 
       {/* Story title */}
-      <div className="max-w-3xl mx-auto px-6 pt-12 pb-8 text-center">
-        <div className="divider-ornament mb-4">
-          <span>✦</span>
-        </div>
-        <h1 className="text-3xl md:text-4xl font-bold text-[var(--ink)] tracking-widest mb-3">
-          {story.title}
-        </h1>
-        {story.description && (
-          <p className="text-[var(--muted)] text-sm">{story.description}</p>
+      <div className={`max-w-3xl mx-auto px-6 pt-12 pb-8 text-center ${showDirectorSidebar ? 'lg:ml-72' : ''} ${showCharacterPanel ? 'lg:mr-72' : ''}`}>
+        <div className="divider-ornament mb-4"><span>✦</span></div>
+        <h1 className="text-3xl md:text-4xl font-bold text-[var(--ink)] tracking-widest mb-3">{story.title}</h1>
+        {story.description && <p className="text-[var(--muted)] text-sm">{story.description}</p>}
+        {story.era && (
+          <div className="mt-2">
+            <span className="inline-flex items-center gap-1 px-3 py-1 bg-amber-50 text-amber-800 text-xs font-medium rounded-full border border-amber-200">
+              📜 {story.era}
+            </span>
+          </div>
         )}
       </div>
 
       {/* Story content */}
-      <div className="max-w-3xl mx-auto px-6 pb-20">
-        <div className="relative">
-          {/* Left decoration line */}
-          <div className="absolute left-8 top-0 bottom-0 w-px bg-gradient-to-b from-[var(--gold)] via-[var(--border)] to-transparent" />
+      <div className={`max-w-3xl mx-auto px-6 pb-20 ${showDirectorSidebar ? 'lg:ml-72' : ''} ${showCharacterPanel ? 'lg:mr-72' : ''}`}>
+        <div className="flex gap-6">
+          {/* Main content */}
+          <div className="flex-1 min-w-0">
+            <div className="relative">
+              <div className="absolute left-8 top-0 bottom-0 w-px bg-gradient-to-b from-[var(--gold)] via-[var(--border)] to-transparent" />
 
-          <div className="space-y-8">
-            {segments.map((seg, idx) => {
-              const branchCount = getBranchCountForSegment(seg.id);
-              return (
-                <div key={seg.id} className="relative pl-16 animate-fade-in-up" style={{ animationDelay: `${idx * 80}ms` }}>
-                  {/* Timeline node */}
-                  <div className={`absolute left-6 top-2 w-5 h-5 rounded-full border-2 flex items-center justify-center ${
-                    seg.isBranchPoint
-                      ? 'border-[var(--accent)] bg-[var(--accent)] branch-pulse'
-                      : 'border-[var(--gold)] bg-[var(--paper)]'
-                  }`}>
-                    {seg.isBranchPoint && <span className="text-white text-xs">⚔</span>}
-                  </div>
+              <div className="space-y-8">
+                {segments.map((seg, idx) => {
+                  const branchCount = getBranchCountForSegment(seg.id);
+                  return (
+                    <div key={seg.id} className="relative pl-16 animate-fade-in-up" style={{ animationDelay: `${idx * 80}ms` }}>
+                      <div className={`absolute left-6 top-2 w-5 h-5 rounded-full border-2 flex items-center justify-center ${
+                        seg.isBranchPoint ? 'border-[var(--accent)] bg-[var(--accent)] branch-pulse' : 'border-[var(--gold)] bg-[var(--paper)]'
+                      }`}>
+                        {seg.isBranchPoint && <span className="text-white text-xs">⚔</span>}
+                      </div>
 
-                  {/* Segment card */}
-                  <div className="rounded-lg border border-[var(--border)] bg-white p-6 shadow-sm">
-                    {/* Branch label */}
-                    {currentBranchId !== 'main' && (
-                      <div className="mb-3 flex items-center gap-2">
-                        <span className="text-xs px-2 py-1 bg-[var(--accent)]/10 text-[var(--accent)] rounded-full border border-[var(--accent)]/30">
-                          分支
-                        </span>
-                        {branches.find(b => b.id === currentBranchId)?.userDirection && (
-                          <span className="text-xs text-[var(--muted)]">
-                            {branches.find(b => b.id === currentBranchId)?.userDirection}
-                          </span>
+                      <div className="rounded-lg border border-[var(--border)] bg-white p-6 shadow-sm">
+                        {currentBranchId !== 'main' && (
+                          <div className="mb-3 flex items-center gap-2">
+                            <span className="text-xs px-2 py-1 bg-[var(--accent)]/10 text-[var(--accent)] rounded-full border border-[var(--accent)]/30">分支</span>
+                            {branches.find(b => b.id === currentBranchId)?.userDirection && (
+                              <span className="text-xs text-[var(--muted)]">{branches.find(b => b.id === currentBranchId)?.userDirection}</span>
+                            )}
+                          </div>
                         )}
-                      </div>
-                    )}
-                    
-                    {seg.title && (
-                      <h3 className="text-lg font-bold text-[var(--ink)] mb-3 flex items-center gap-2">
-                        <span className="text-[var(--gold)]">·</span>
-                        {seg.title}
-                      </h3>
-                    )}
-                    <p className="prose-chinese text-[var(--ink)]">
-                      {seg.content}
-                    </p>
+                        
+                        {seg.title && (
+                          <h3 className="text-lg font-bold text-[var(--ink)] mb-3 flex items-center gap-2">
+                            <span className="text-[var(--gold)]">·</span>{seg.title}
+                          </h3>
+                        )}
+                        <p className="prose-chinese text-[var(--ink)]">{seg.content}</p>
 
-                    {/* Branch point indicator */}
-                    {seg.isBranchPoint && branchCount > 0 && (
-                      <div className="mt-4 pt-3 border-t border-dashed border-[var(--border)]">
-                        <p className="text-xs text-[var(--accent)] font-medium flex items-center gap-1">
-                          ⚔ 此处有 {branchCount} 条分叉路线
-                        </p>
-                      </div>
-                    )}
+                        {/* C6: Segment metadata */}
+                        {seg.mood && (
+                          <div className="mt-2 flex items-center gap-2">
+                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-purple-50 text-purple-600 border border-purple-200">
+                              氛围: {seg.mood}
+                            </span>
+                            {seg.narrativePace && (
+                              <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 border border-blue-200">
+                                节奏: {seg.narrativePace}
+                              </span>
+                            )}
+                          </div>
+                        )}
 
-                    {/* Fork button on every segment */}
-                    <div className="mt-4 pt-3 border-t border-[var(--border)]/50 flex justify-end">
-                      <button
-                        onClick={() => handleBranch(seg.id)}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs text-[var(--muted)] hover:text-[var(--accent)] hover:bg-[var(--accent)]/5 rounded-lg transition-all group"
-                        title="从此处分叉"
-                      >
-                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 17h8m0 0V9m0 8l-8-8-4 4-6-6" />
-                        </svg>
-                        <span className="hidden group-hover:inline">从此处分叉</span>
-                        <span className="group-hover:hidden">分叉</span>
-                      </button>
+                        {seg.isBranchPoint && branchCount > 0 && (
+                          <div className="mt-4 pt-3 border-t border-dashed border-[var(--border)]">
+                            <p className="text-xs text-[var(--accent)] font-medium flex items-center gap-1">
+                              ⚔ 此处有 {branchCount} 条分叉路线
+                            </p>
+                          </div>
+                        )}
+
+                        <div className="mt-4 pt-3 border-t border-[var(--border)]/50 flex justify-end">
+                          <button
+                            onClick={() => handleBranch(seg.id)}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs text-[var(--muted)] hover:text-[var(--accent)] hover:bg-[var(--accent)]/5 rounded-lg transition-all group"
+                            title="从此处分叉"
+                          >
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 17h8m0 0V9m0 8l-8-8-4 4-6-6" />
+                            </svg>
+                            <span className="hidden group-hover:inline">从此处分叉</span>
+                            <span className="group-hover:hidden">分叉</span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {/* C6.6: Line-stepped streaming */}
+                {newContent && (
+                  <div className="relative pl-16 animate-fade-in-up">
+                    <div className="absolute left-6 top-2 w-5 h-5 rounded-full border-2 border-blue-400 bg-blue-50 flex items-center justify-center">
+                      <span className="text-blue-500 text-xs">✦</span>
+                    </div>
+                    <div className="rounded-lg border border-blue-200 bg-blue-50/50 p-6 shadow-sm">
+                      {displayedLines.slice(0, lineStep).map((line, i) => (
+                        <p key={i} className="prose-chinese text-[var(--ink)]">{line}</p>
+                      ))}
+                      
+                      {/* Paused indicator */}
+                      {isPaused && lineStep < displayedLines.length && (
+                        <div className="mt-3 flex items-center gap-2 text-xs text-amber-600 bg-amber-50 rounded px-3 py-1.5">
+                          <span>⏸</span> 已暂停 · 还有 {displayedLines.length - lineStep} 行未显示
+                          <button onClick={advanceLines} className="ml-auto px-2 py-0.5 bg-amber-100 rounded text-amber-700 hover:bg-amber-200">
+                            显示更多
+                          </button>
+                        </div>
+                      )}
+
+                      {/* Auto-advance indicator */}
+                      {!isPaused && continuing && lineStep < displayedLines.length && (
+                        <div className="mt-2 flex items-center gap-1 text-xs text-blue-500">
+                          <span className="inline-block w-1.5 h-1.5 bg-blue-500 rounded-full animate-pulse" />
+                          显示中 {lineStep}/{displayedLines.length}
+                        </div>
+                      )}
+
+                      {!continuing && lineStep < displayedLines.length && !isPaused && (
+                        <div className="mt-2">
+                          <button onClick={advanceLines} className="text-xs text-blue-500 hover:text-blue-700">
+                            显示更多 ({displayedLines.length - lineStep} 行剩余)
+                          </button>
+                        </div>
+                      )}
+
+                      {continuing && (
+                        <span className="inline-block w-0.5 h-5 bg-[var(--ink)] animate-pulse ml-0.5 align-text-bottom" />
+                      )}
                     </div>
                   </div>
-                </div>
-              );
-            })}
+                )}
+              </div>
+            </div>
 
-            {/* Streaming new content */}
-            {newContent && (
-              <div className="relative pl-16 animate-fade-in-up">
-                <div className="absolute left-6 top-2 w-5 h-5 rounded-full border-2 border-blue-400 bg-blue-50 flex items-center justify-center">
-                  <span className="text-blue-500 text-xs">✦</span>
-                </div>
-                <div className="rounded-lg border border-blue-200 bg-blue-50/50 p-6 shadow-sm">
-                  <p className="prose-chinese text-[var(--ink)]">
-                    {newContent}
-                    <span className="inline-block w-0.5 h-5 bg-[var(--ink)] animate-pulse ml-0.5 align-text-bottom" />
-                  </p>
-                </div>
+            {/* Bottom action bar */}
+            {segments.length > 0 && (
+              <div className="mt-12 text-center">
+                <div className="divider-ornament mb-6"><span>✦</span></div>
+                <button
+                  onClick={handleContinue}
+                  disabled={continuing}
+                  className={`inline-flex items-center gap-2 px-8 py-3 rounded-full font-medium transition-all ${
+                    continuing
+                      ? 'bg-gray-200 text-[var(--muted)] cursor-wait'
+                      : 'bg-gradient-to-r from-amber-700 to-red-800 text-white hover:shadow-lg hover:shadow-amber-900/20'
+                  }`}
+                >
+                  {continuing ? (
+                    <><span className="inline-block w-4 h-4 border-2 border-[var(--muted)] border-t-transparent rounded-full animate-spin" />故事书写中...</>
+                  ) : (
+                    <>✦ 续写故事</>
+                  )}
+                </button>
               </div>
             )}
           </div>
+
+          {/* C6: Timeline sidebar (inline on desktop) */}
+          {showTimeline && (
+            <div className="hidden lg:block w-64 shrink-0">
+              <div className="sticky top-36 rounded-xl border border-[var(--border)] bg-white p-4 shadow-sm">
+                <TimelineBar
+                  storyId={id}
+                  branchId={currentBranchId}
+                  currentSegmentId={tailSegment?.id}
+                  segments={segments}
+                />
+              </div>
+            </div>
+          )}
         </div>
 
-        {/* Bottom action bar */}
-        {segments.length > 0 && (
-          <div className="mt-12 text-center">
-            <div className="divider-ornament mb-6">
-              <span>✦</span>
-            </div>
-            <button
-              onClick={handleContinue}
-              disabled={continuing}
-              className={`inline-flex items-center gap-2 px-8 py-3 rounded-full font-medium transition-all ${
-                continuing
-                  ? 'bg-gray-200 text-[var(--muted)] cursor-wait'
-                  : 'bg-gradient-to-r from-amber-700 to-red-800 text-white hover:shadow-lg hover:shadow-amber-900/20'
-              }`}
-            >
-              {continuing ? (
-                <>
-                  <span className="inline-block w-4 h-4 border-2 border-[var(--muted)] border-t-transparent rounded-full animate-spin" />
-                  故事书写中...
-                </>
-              ) : (
-                <>✦ 续写故事</>
-              )}
-            </button>
+        {/* C6.4: Pacing controls */}
+        {(continuing || newContent) && (
+          <div className="mt-8">
+            <PacingControls
+              config={pacingConfig}
+              onChange={setPacingConfig}
+              onPause={handlePause}
+              onResume={handleResume}
+              isPaused={isPaused}
+            />
           </div>
         )}
       </div>

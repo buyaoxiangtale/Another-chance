@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { storiesStore, segmentsStore, getOrderedChain, type StorySegment } from '@/lib/simple-db';
+import { buildFullPrompt } from '@/lib/prompt-builder';
+import { directorManager } from '@/lib/director-manager';
+import { timelineEngine } from '@/lib/timeline-engine';
 
-async function callAI(prompt: string): Promise<string> {
+async function callAI(prompt: string, maxTokens: number = 2000): Promise<string> {
   const baseUrl = process.env.AI_BASE_URL || 'https://api.openai.com/v1';
   const apiKey = process.env.AI_API_KEY || '';
   const model = process.env.AI_MODEL || 'gpt-3.5-turbo';
@@ -19,7 +22,7 @@ async function callAI(prompt: string): Promise<string> {
         { role: 'user', content: prompt }
       ],
       temperature: 0.7,
-      max_tokens: 2000
+      max_tokens: maxTokens
     })
   });
 
@@ -32,10 +35,13 @@ async function callAI(prompt: string): Promise<string> {
   return data.choices?.[0]?.message?.content || '';
 }
 
+/**
+ * 5.1 改造 continue route — 支持 pacingConfig 和 directorOverrides 参数
+ */
 export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
   try {
     const { id: storyId } = params;
-    const { branchId = 'main' } = await request.json();
+    const { branchId = 'main', pacingConfig, directorOverrides } = await request.json();
 
     if (!storyId) {
       return NextResponse.json({ error: '缺少参数' }, { status: 400 });
@@ -45,27 +51,55 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     const story = stories.find((s: any) => s.id === storyId);
     if (!story) return NextResponse.json({ error: '故事不存在' }, { status: 404 });
 
-    // Get ordered chain to find tail segment
     const chain = await getOrderedChain(storyId, branchId);
     if (chain.length === 0) {
       return NextResponse.json({ error: '该分支没有段落' }, { status: 404 });
     }
     const tailSegment = chain[chain.length - 1];
 
-    // Build context from the ordered chain
-    const contextSummary = chain.map((s: StorySegment) =>
-      `${s.title ? `【${s.title}】` : ''}${s.content}`
-    ).join('\n');
+    // 8.4 时间轴校验
+    let timelineWarnings: string[] = [];
+    try {
+      const violations = await timelineEngine.validateTimeline(storyId, branchId);
+      if (violations.length > 0) {
+        timelineWarnings = violations.map(v => v.issue);
+        console.warn(`[continue] 时间轴校验警告: ${timelineWarnings.join('; ')}`);
+      }
+    } catch (e) {
+      console.warn('[continue] 时间轴校验失败（非致命）:', e);
+    }
 
-    const prompt = `故事标题：${story.title}
+    // 5.8 使用集成 prompt 构建
+    let prompt: string;
+    if (pacingConfig || directorOverrides) {
+      prompt = await buildFullPrompt({
+        storyId,
+        branchId,
+        tailSegment,
+        chain,
+        storyTitle: story.title,
+        storyDescription: story.description,
+        pacingConfig,
+        directorOverrides,
+      });
+    } else {
+      // 向后兼容：不传 pacingConfig 时使用原始逻辑
+      const contextSummary = chain.map((s: StorySegment) =>
+        `${s.title ? `【${s.title}】` : ''}${s.content}`
+      ).join('\n');
+
+      prompt = `故事标题：${story.title}
 故事背景：${story.description || ''}
 
 当前故事进展：
 ${contextSummary}
 
 请续写下一段（150-300字），保持古典文学风格，与前文情节连续。`;
+    }
 
-    const aiResponse = await callAI(prompt);
+    // 根据 pacingConfig 调整 max_tokens
+    const maxTokens = pacingConfig?.pace === 'detailed' ? 4000 : 2000;
+    const aiResponse = await callAI(prompt, maxTokens);
 
     const segments = await segmentsStore.load();
     const newSegment: StorySegment = {
@@ -77,6 +111,9 @@ ${contextSummary}
       branchId,
       parentSegmentId: tailSegment.id,
       imageUrls: [],
+      // 5.1 记录节奏和情绪
+      narrativePace: pacingConfig?.pace,
+      mood: pacingConfig?.mood,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };

@@ -1,0 +1,20 @@
+[
+  {
+    "id": "dir_1776171146963_mn0fzy",
+    "storyId": "story_1_荆轲刺秦王",
+    "characterStates": {},
+    "worldVariables": {},
+    "activeConstraints": [],
+    "updatedAt": "2026-04-14T12:52:26.963Z"
+  },
+  {
+    "id": "dir_1776176555018_lee50l",
+    "storyId": "story_2_赤壁之战",
+    "characterStates": {
+      "刘备": ""
+    },
+    "worldVariables": {},
+    "activeConstraints": [],
+    "updatedAt": "2026-04-14T14:23:33.000Z"
+  }
+]

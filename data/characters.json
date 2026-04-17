@@ -1,0 +1,281 @@
+[
+  {
+    "id": "char_mnzwozgz_xb5tn0",
+    "name": "荆轲",
+    "role": "protagonist",
+    "traits": [
+      "勇敢",
+      "侠义",
+      "深沉",
+      "善辩",
+      "重诺轻死"
+    ],
+    "speechPatterns": "壮士一去兮不复还，风萧萧兮易水寒。",
+    "coreMotivation": "报太子丹知遇之恩，以死报知己，刺秦救燕",
+    "relationships": [],
+    "stateHistory": [],
+    "createdAt": "2026-04-15T10:27:13.427Z",
+    "updatedAt": "2026-04-15T10:27:13.427Z"
+  },
+  {
+    "id": "char_mnzwozh2_s4ep5q",
+    "name": "秦王嬴政",
+    "role": "antagonist",
+    "traits": [
+      "雄才大略",
+      "多疑",
+      "威严",
+      "冷酷"
+    ],
+    "speechPatterns": "朕即天下，六国必灭。",
+    "coreMotivation": "统一六国，建立万世基业",
+    "relationships": [],
+    "stateHistory": [],
+    "createdAt": "2026-04-15T10:27:13.430Z",
+    "updatedAt": "2026-04-15T10:27:13.430Z"
+  },
+  {
+    "id": "char_mnzwozh2_h2lsum",
+    "name": "燕太子丹",
+    "role": "supporting",
+    "traits": [
+      "忧国忧民",
+      "重情义",
+      "急躁"
+    ],
+    "speechPatterns": "国仇家恨，丹岂能忘？",
+    "coreMotivation": "报质秦之辱，保全燕国",
+    "relationships": [],
+    "stateHistory": [],
+    "createdAt": "2026-04-15T10:27:13.430Z",
+    "updatedAt": "2026-04-15T10:27:13.430Z"
+  },
+  {
+    "id": "char_mnzwozh2_ednzgg",
+    "name": "樊於期",
+    "role": "supporting",
+    "traits": [
+      "忠勇",
+      "刚烈",
+      "视死如归"
+    ],
+    "speechPatterns": "将军之首，愿为壮士之资。",
+    "coreMotivation": "报仇雪恨，以死助荆轲成事",
+    "relationships": [],
+    "stateHistory": [],
+    "createdAt": "2026-04-15T10:27:13.430Z",
+    "updatedAt": "2026-04-15T10:27:13.430Z"
+  },
+  {
+    "id": "char_mnzwozh2_ay0kep",
+    "name": "高渐离",
+    "role": "supporting",
+    "traits": [
+      "洒脱",
+      "重情",
+      "悲歌慷慨"
+    ],
+    "speechPatterns": "风萧萧兮易水寒，壮士一去兮不复还！",
+    "coreMotivation": "以音乐送别知己",
+    "relationships": [],
+    "stateHistory": [],
+    "createdAt": "2026-04-15T10:27:13.430Z",
+    "updatedAt": "2026-04-15T10:27:13.430Z"
+  },
+  {
+    "id": "char_mnzwozh2_guemh1",
+    "name": "曹操",
+    "role": "antagonist",
+    "traits": [
+      "雄才",
+      "奸诈",
+      "自负",
+      "豪迈",
+      "诗人"
+    ],
+    "speechPatterns": "宁教我负天下人，休教天下人负我。",
+    "coreMotivation": "统一天下，成就霸业",
+    "relationships": [],
+    "stateHistory": [],
+    "createdAt": "2026-04-15T10:27:13.430Z",
+    "updatedAt": "2026-04-15T10:27:13.430Z"
+  },
+  {
+    "id": "char_mnzwozh2_9zffon",
+    "name": "刘备",
+    "role": "protagonist",
+    "traits": [
+      "仁德",
+      "坚韧",
+      "隐忍",
+      "善用人"
+    ],
+    "speechPatterns": "备虽不才，愿与诸公共图大业。",
+    "coreMotivation": "匡扶汉室，救苍生于水火",
+    "relationships": [],
+    "stateHistory": [],
+    "createdAt": "2026-04-15T10:27:13.430Z",
+    "updatedAt": "2026-04-15T10:27:13.430Z"
+  },
+  {
+    "id": "char_mnzwozh2_29nylj",
+    "name": "孙权",
+    "role": "supporting",
+    "traits": [
+      "年轻有为",
+      "果断",
+      "善纳谏"
+    ],
+    "speechPatterns": "孤继承父兄基业，岂能拱手让人？",
+    "coreMotivation": "保全江东基业，抗曹自立",
+    "relationships": [],
+    "stateHistory": [],
+    "createdAt": "2026-04-15T10:27:13.430Z",
+    "updatedAt": "2026-04-15T10:27:13.430Z"
+  },
+  {
+    "id": "char_mnzwozh2_lizol7",
+    "name": "诸葛亮",
+    "role": "supporting",
+    "traits": [
+      "睿智",
+      "忠诚",
+      "谨慎",
+      "神机妙算"
+    ],
+    "speechPatterns": "运筹帷幄之中，决胜千里之外。",
+    "coreMotivation": "鞠躬尽瘁，死而后已",
+    "relationships": [],
+    "stateHistory": [],
+    "createdAt": "2026-04-15T10:27:13.430Z",
+    "updatedAt": "2026-04-15T10:27:13.430Z"
+  },
+  {
+    "id": "char_mnzwozh2_pzq6f1",
+    "name": "周瑜",
+    "role": "supporting",
+    "traits": [
+      "儒将",
+      "英姿勃发",
+      "心胸狭窄"
+    ],
+    "speechPatterns": "既生瑜，何生亮！",
+    "coreMotivation": "保卫江东，击败曹操",
+    "relationships": [],
+    "stateHistory": [],
+    "createdAt": "2026-04-15T10:27:13.430Z",
+    "updatedAt": "2026-04-15T10:27:13.430Z"
+  },
+  {
+    "id": "char_mnzwozh2_g9p1sj",
+    "name": "黄盖",
+    "role": "supporting",
+    "traits": [
+      "老将",
+      "忠勇",
+      "刚烈"
+    ],
+    "speechPatterns": "老臣虽朽，尚能为吴国效死！",
+    "coreMotivation": "效忠东吴，以苦肉计破曹",
+    "relationships": [],
+    "stateHistory": [],
+    "createdAt": "2026-04-15T10:27:13.430Z",
+    "updatedAt": "2026-04-15T10:27:13.430Z"
+  },
+  {
+    "id": "char_mnzwozh2_jjin7b",
+    "name": "李世民",
+    "role": "protagonist",
+    "traits": [
+      "英武",
+      "果断",
+      "知人善任",
+      "仁厚有度"
+    ],
+    "speechPatterns": "天下者，非一人之天下，乃有德者之天下。",
+    "coreMotivation": "开创贞观之治，成为千古一帝",
+    "relationships": [],
+    "stateHistory": [],
+    "createdAt": "2026-04-15T10:27:13.430Z",
+    "updatedAt": "2026-04-15T10:27:13.431Z"
+  },
+  {
+    "id": "char_mnzwozh3_kxf26f",
+    "name": "李建成",
+    "role": "antagonist",
+    "traits": [
+      "稳重",
+      "猜忌",
+      "城府深"
+    ],
+    "speechPatterns": "吾乃太子，储君之位天命所归。",
+    "coreMotivation": "巩固太子地位，铲除世民",
+    "relationships": [],
+    "stateHistory": [],
+    "createdAt": "2026-04-15T10:27:13.431Z",
+    "updatedAt": "2026-04-15T10:27:13.431Z"
+  },
+  {
+    "id": "char_mnzwozh3_2lfrzo",
+    "name": "李元吉",
+    "role": "antagonist",
+    "traits": [
+      "暴躁",
+      "鲁莽",
+      "善妒"
+    ],
+    "speechPatterns": "二哥功高盖主，当除之！",
+    "coreMotivation": "依附太子，借机上位",
+    "relationships": [],
+    "stateHistory": [],
+    "createdAt": "2026-04-15T10:27:13.431Z",
+    "updatedAt": "2026-04-15T10:27:13.431Z"
+  },
+  {
+    "id": "char_mnzwozh3_xgig5j",
+    "name": "尉迟敬德",
+    "role": "supporting",
+    "traits": [
+      "勇猛无敌",
+      "忠心耿耿",
+      "直爽"
+    ],
+    "speechPatterns": "末将愿为秦王赴汤蹈火！",
+    "coreMotivation": "报秦王知遇之恩",
+    "relationships": [],
+    "stateHistory": [],
+    "createdAt": "2026-04-15T10:27:13.431Z",
+    "updatedAt": "2026-04-15T10:27:13.431Z"
+  },
+  {
+    "id": "char_mnzwozh3_xq9kc7",
+    "name": "长孙无忌",
+    "role": "supporting",
+    "traits": [
+      "足智多谋",
+      "忠厚",
+      "深谋远虑"
+    ],
+    "speechPatterns": "此事宜早不宜迟。",
+    "coreMotivation": "辅佐秦王夺嫡",
+    "relationships": [],
+    "stateHistory": [],
+    "createdAt": "2026-04-15T10:27:13.431Z",
+    "updatedAt": "2026-04-15T10:27:13.431Z"
+  },
+  {
+    "id": "char_mnzwozh3_xdseh4",
+    "name": "魏征",
+    "role": "supporting",
+    "traits": [
+      "刚正不阿",
+      "直言敢谏"
+    ],
+    "speechPatterns": "直言逆耳，然利于行。",
+    "coreMotivation": "忠于社稷，辅佐明主",
+    "relationships": [],
+    "stateHistory": [],
+    "createdAt": "2026-04-15T10:27:13.431Z",
+    "updatedAt": "2026-04-15T10:27:13.431Z"
+  }
+]

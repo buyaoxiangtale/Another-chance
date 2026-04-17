@@ -5,7 +5,14 @@
     "description": "基于荆轲刺秦王历史事件的故事续写平台，探索不同历史转折点",
     "author": "历史故事组",
     "createdAt": "2026-04-12T09:59:44.221Z",
-    "updatedAt": "2026-04-12T09:59:44.221Z"
+    "updatedAt": "2026-04-12T09:59:44.221Z",
+    "characterIds": [
+      "char_mnzwozgz_xb5tn0",
+      "char_mnzwozh2_s4ep5q",
+      "char_mnzwozh2_h2lsum",
+      "char_mnzwozh2_ednzgg",
+      "char_mnzwozh2_ay0kep"
+    ]
   },
   {
     "id": "story_2_赤壁之战",
@@ -13,7 +20,15 @@
     "description": "基于赤壁之战历史事件的故事续写平台，重新演绎三国历史",
     "author": "历史故事组",
     "createdAt": "2026-04-12T09:59:44.228Z",
-    "updatedAt": "2026-04-12T09:59:44.228Z"
+    "updatedAt": "2026-04-12T09:59:44.228Z",
+    "characterIds": [
+      "char_mnzwozh2_guemh1",
+      "char_mnzwozh2_9zffon",
+      "char_mnzwozh2_29nylj",
+      "char_mnzwozh2_lizol7",
+      "char_mnzwozh2_pzq6f1",
+      "char_mnzwozh2_g9p1sj"
+    ]
   },
   {
     "id": "story_3_玄武门之变",
@@ -21,7 +36,15 @@
     "description": "基于玄武门之变历史事件的故事续写平台，改变唐朝历史走向",
     "author": "历史故事组",
     "createdAt": "2026-04-12T09:59:44.228Z",
-    "updatedAt": "2026-04-12T09:59:44.228Z"
+    "updatedAt": "2026-04-12T09:59:44.228Z",
+    "characterIds": [
+      "char_mnzwozh2_jjin7b",
+      "char_mnzwozh3_kxf26f",
+      "char_mnzwozh3_2lfrzo",
+      "char_mnzwozh3_xgig5j",
+      "char_mnzwozh3_xq9kc7",
+      "char_mnzwozh3_xdseh4"
+    ]
   },
   {
     "id": "story_1775994497022_q94ao4wql",

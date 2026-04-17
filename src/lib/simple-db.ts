@@ -141,6 +141,8 @@ async function getStoryBranches(storyId: string): Promise<StoryBranch[]> {
 const charactersStore = new SimpleStore<Character>('characters.json');
 const historicalReferencesStore = new SimpleStore<HistoricalReference>('historical-references.json');
 const directorStatesStore = new SimpleStore<DirectorState>('director-states.json');
+const summariesStore = new SimpleStore<any>('summaries.json');
+const eventsStore = new SimpleStore<any>('events.json');
 
 export {
   storiesStore,
@@ -149,6 +151,8 @@ export {
   charactersStore,
   historicalReferencesStore,
   directorStatesStore,
+  summariesStore,
+  eventsStore,
   getOrderedChain,
   getTailSegment,
   getStorySegments,

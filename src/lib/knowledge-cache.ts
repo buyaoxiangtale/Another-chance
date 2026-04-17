@@ -80,27 +80,32 @@ export async function setCache(query: string, type: 'search' | 'article' | 'fact
  */
 export async function enrichPromptWithFacts(
   prompt: string,
-  entities: Array<{ name: string; type: string }>
+  entities: Array<{ name: string; type: string }>,
+  ctx?: import('./mcp-wikipedia').StoryContext
 ): Promise<string> {
-  const { searchWikipedia, getWikiArticle } = await import('./mcp-wikipedia');
+  const { searchWikipedia, getWikiArticle, buildSearchQuery, filterResults, shouldPreferHistory } = await import('./mcp-wikipedia');
 
+  const preferHistory = shouldPreferHistory(ctx);
   const factLines: string[] = [];
 
   for (const entity of entities) {
     // 先查缓存
-    const cached = await getCached(`fact:${entity.name}`, 'factcheck');
+    const cacheKey = `${preferHistory ? 'history' : 'fiction'}:${entity.name}`;
+    const cached = await getCached(cacheKey, 'factcheck');
     if (cached) {
       factLines.push(formatFact((cached as any).name, (cached as any).summary));
       continue;
     }
 
-    const results = await searchWikipedia(`${entity.name} 历史`);
+    const query = buildSearchQuery(entity, undefined, ctx);
+    let results = await searchWikipedia(query);
+    results = filterResults(results, preferHistory);
     if (results.length > 0) {
       const article = await getWikiArticle(results[0].title);
       const extract = article?.extract || results[0].snippet;
       const summary = extract.length > 200 ? extract.slice(0, 200) + '...' : extract;
 
-      await setCache(`fact:${entity.name}`, 'factcheck', { name: entity.name, summary });
+      await setCache(cacheKey, 'factcheck', { name: entity.name, summary });
       factLines.push(formatFact(entity.name, summary));
     }
   }

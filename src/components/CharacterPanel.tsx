@@ -175,33 +175,26 @@ export default function CharacterPanel({ storyId, branchId, segmentId, isOpen, o
 
   return (
     <>
-      {/* Desktop sidebar */}
-      <div className={`hidden lg:block fixed right-0 top-16 bottom-0 w-72 bg-gray-900/95 backdrop-blur-sm border-l border-white/10 z-20 transition-transform duration-300 ${
-        isOpen ? 'translate-x-0' : 'translate-x-full'
-      }`}>
-        <PanelContent />
-      </div>
+      {/* Backdrop */}
+      {isOpen && <div className="fixed inset-0 z-20 bg-black/40" onClick={onToggle} />}
 
-      {/* Mobile toggle button */}
-      <button
-        onClick={onToggle}
-        className="lg:hidden fixed bottom-4 right-4 z-30 w-12 h-12 rounded-full bg-gray-900/90 backdrop-blur-sm border border-amber-400/30 text-amber-300 shadow-lg flex items-center justify-center text-lg"
-        title="角色面板"
-      >
-        🎭
-      </button>
-
-      {/* Mobile bottom drawer */}
+      {/* Panel: mobile = bottom drawer, desktop = centered modal */}
       {isOpen && (
-        <>
-          <div className="lg:hidden fixed inset-0 z-20 bg-black/40" onClick={onToggle} />
-          <div className="lg:hidden fixed bottom-0 left-0 right-0 z-30 bg-gray-900/95 backdrop-blur-sm border-t border-white/10 rounded-t-2xl max-h-[60vh] overflow-hidden animate-slide-up">
-            <div className="flex justify-center pt-2 pb-1">
-              <div className="w-10 h-1 rounded-full bg-gray-600" />
-            </div>
-            <PanelContent />
+        <div className="fixed z-30 transition-all duration-300 bg-gray-900/95 backdrop-blur-sm
+          bottom-0 left-0 right-0
+          rounded-t-2xl max-h-[60vh] border-t border-white/10
+          overflow-hidden
+          lg:inset-auto lg:bottom-auto lg:left-auto lg:right-auto
+          lg:top-1/2 lg:left-1/2
+          lg:-translate-x-1/2 lg:-translate-y-1/2
+          lg:w-[480px] lg:max-h-[80vh] lg:rounded-2xl lg:border lg:border-white/10
+        ">
+          {/* Drag handle (mobile only) */}
+          <div className="flex justify-center pt-2 pb-1 lg:hidden">
+            <div className="w-10 h-1 rounded-full bg-gray-600" />
           </div>
-        </>
+          <PanelContent />
+        </div>
       )}
     </>
   );

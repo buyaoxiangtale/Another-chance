@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { storiesStore, segmentsStore, getOrderedChain, type StorySegment } from '@/lib/simple-db';
 import { buildFullPrompt } from '@/lib/prompt-builder';
 import { PacingEngine } from '@/lib/pacing-engine';
+import { consistencyChecker } from '@/lib/consistency-checker';
 
 /**
  * 5.2 + 5.4 + 5.5 改造 stream-continue route
@@ -57,6 +58,18 @@ ${contextSummary}
 
     const pacingEngine = pacingConfig ? new PacingEngine(pacingConfig) : null;
 
+    // C3: 矛盾检测 — 续写前检测前文矛盾
+    let consistencyWarnings: string[] = [];
+    try {
+      const preIssues = await consistencyChecker.checkChainConsistency(chain);
+      if (preIssues.length > 0) {
+        consistencyWarnings = preIssues.map(i => `[${i.severity}] ${i.description}`);
+        console.warn(`[stream-continue] 前文矛盾检测: ${consistencyWarnings.join('; ')}`);
+      }
+    } catch (e) {
+      console.warn('[stream-continue] 前文矛盾检测失败（非致命）:', e);
+    }
+
     // 5.5 发送 metadata 事件
     const metadataEvent = {
       type: 'metadata',
@@ -64,6 +77,7 @@ ${contextSummary}
       branchId,
       pace: pacingConfig?.pace || null,
       mood: pacingConfig?.mood || null,
+      warnings: consistencyWarnings.length > 0 ? consistencyWarnings : undefined,
     };
 
     const baseUrl = process.env.AI_BASE_URL || 'https://open.bigmodel.cn/api/paas/v4';
@@ -181,6 +195,18 @@ ${contextSummary}
 
           allSegments.push(newSegment);
           await segmentsStore.save(allSegments);
+
+          // C3: 续写后检测新内容矛盾
+          try {
+            const postIssues = await consistencyChecker.runConsistencyCheck(newSegment, [...chain, newSegment]);
+            if (postIssues.length > 0) {
+              const postWarnings = postIssues.map(i => `[${i.severity}] ${i.description}`);
+              const warningEvent = { type: 'consistency_warnings', warnings: postWarnings };
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify(warningEvent)}\n\n`));
+            }
+          } catch (e) {
+            console.warn('[stream-continue] 新内容矛盾检测失败（非致命）:', e);
+          }
 
           controller.enqueue(encoder.encode('data: [DONE]\n\n'));
           controller.close();

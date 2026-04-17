@@ -3,6 +3,7 @@ import { storiesStore, segmentsStore, getOrderedChain, type StorySegment } from 
 import { buildFullPrompt } from '@/lib/prompt-builder';
 import { directorManager } from '@/lib/director-manager';
 import { timelineEngine } from '@/lib/timeline-engine';
+import { consistencyChecker } from '@/lib/consistency-checker';
 
 async function callAI(prompt: string, maxTokens: number = 2000): Promise<string> {
   const baseUrl = process.env.AI_BASE_URL || 'https://api.openai.com/v1';
@@ -56,6 +57,18 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       return NextResponse.json({ error: '该分支没有段落' }, { status: 404 });
     }
     const tailSegment = chain[chain.length - 1];
+
+    // C3: 矛盾检测 — 续写前检测前文矛盾
+    let consistencyWarnings: string[] = [];
+    try {
+      const preIssues = await consistencyChecker.checkChainConsistency(chain);
+      if (preIssues.length > 0) {
+        consistencyWarnings = preIssues.map(i => `[${i.severity}] ${i.description}`);
+        console.warn(`[continue] 前文矛盾检测: ${consistencyWarnings.join('; ')}`);
+      }
+    } catch (e) {
+      console.warn('[continue] 前文矛盾检测失败（非致命）:', e);
+    }
 
     // 8.4 时间轴校验
     let timelineWarnings: string[] = [];
@@ -121,7 +134,26 @@ ${contextSummary}
     segments.push(newSegment);
     await segmentsStore.save(segments);
 
-    return NextResponse.json({ success: true, segment: newSegment });
+    // C3: 续写后检测新内容矛盾
+    try {
+      const postIssues = await consistencyChecker.runConsistencyCheck(newSegment, [...chain, newSegment]);
+      if (postIssues.length > 0) {
+        const newWarnings = postIssues.map(i => `[${i.severity}] ${i.description}`);
+        consistencyWarnings.push(...newWarnings);
+        console.warn(`[continue] 新内容矛盾检测: ${newWarnings.join('; ')}`);
+      }
+    } catch (e) {
+      console.warn('[continue] 新内容矛盾检测失败（非致命）:', e);
+    }
+
+    return NextResponse.json({
+      success: true,
+      segment: newSegment,
+      warnings: {
+        consistency: consistencyWarnings,
+        timeline: timelineWarnings,
+      }
+    });
 
   } catch (error) {
     console.error('故事续写失败:', error);

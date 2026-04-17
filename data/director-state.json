@@ -15,6 +15,16 @@
     },
     "worldVariables": {},
     "activeConstraints": [],
-    "updatedAt": "2026-04-14T14:23:33.000Z"
+    "updatedAt": "2026-04-15T04:33:53.283Z"
+  },
+  {
+    "id": "dir_1776228905975_35j40h",
+    "storyId": "story_1775994497022_q94ao4wql",
+    "characterStates": {
+      "张飞": ""
+    },
+    "worldVariables": {},
+    "activeConstraints": [],
+    "updatedAt": "2026-04-15T10:14:51.534Z"
   }
 ]

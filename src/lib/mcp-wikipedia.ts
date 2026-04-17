@@ -161,12 +161,84 @@ export function extractHistoricalEntities(text: string): Array<{ name: string; t
 }
 
 /**
+ * 故事上下文，用于智能判断搜索偏好
+ */
+export interface StoryContext {
+  genre?: string;    // 故事类型：正史、演义、架空、同人、玄幻等
+  era?: string;      // 朝代/时代
+  description?: string; // 故事简介（可选，用于更精确判断）
+}
+
+/**
+ * 判断故事是否偏向虚构作品（演义/架空/同人等）
+ * 返回 true 表示优先搜正史，false 表示保留虚构词条
+ */
+export function shouldPreferHistory(ctx?: StoryContext): boolean {
+  if (!ctx?.genre) return true; // 默认优先正史
+
+  const fictionKeywords = ['演义', '架空', '同人', '玄幻', '仙侠', '魔幻', '穿越', '重生', '武侠', '架空历史', '奇幻', '轻小说', '网文'];
+  const isFiction = fictionKeywords.some(k => ctx.genre.includes(k));
+
+  if (isFiction) return false;
+
+  // 即使是"正史"类型，如果描述中明确提到某部小说/影视，也标记下来
+  if (ctx.description) {
+    const fictionWorkKeywords = ['三国演义', '水浒传', '西游记', '红楼梦', '封神演义', '隋唐演义', '说岳全传', '东周列国志'];
+    const referencesFiction = fictionWorkKeywords.some(k => ctx.description.includes(k));
+    if (referencesFiction) return false;
+  }
+
+  return true;
+}
+
+/**
+ * 根据实体类型和故事上下文构建搜索关键词
+ */
+export function buildSearchQuery(entity: { name: string; type: string }, era?: string, ctx?: StoryContext): string {
+  const preferHistory = shouldPreferHistory(ctx);
+
+  switch (entity.type) {
+    case 'person':
+      // 正史模式：直接搜人名
+      // 虚构模式：不加限定，让维基返回最相关的结果（可能含小说人物）
+      return entity.name;
+    case 'event':
+      return `${entity.name} ${era || ''}`;
+    case 'place':
+      return `${entity.name} ${era || ''}`;
+    case 'artifact':
+      return entity.name;
+    default:
+      return entity.name;
+  }
+}
+
+/**
+ * 过滤维基百科搜索结果
+ * preferHistory=true 时过滤掉影视/小说词条
+ * preferHistory=false 时保留所有结果
+ */
+const MEDIA_KEYWORDS = ['电影', '电视剧', '游戏', '动漫', '漫画', '电视节目', '专辑', '歌曲', '舞台剧', '音乐剧'];
+
+export function filterResults(results: WikiSearchResult[], preferHistory: boolean): WikiSearchResult[] {
+  if (!preferHistory) return results;
+
+  // 正史模式：过滤掉非历史词条
+  const filtered = results.filter(r =>
+    !MEDIA_KEYWORDS.some(k => r.snippet.includes(k))
+  );
+  return filtered.length > 0 ? filtered : results;
+}
+
+/**
  * 4.5 批量查询实体的历史准确性，返回事实锚点列表
  */
 export async function factCheckEntities(
   entities: Array<{ name: string; type: string }>,
-  era?: string
+  era?: string,
+  ctx?: StoryContext
 ): Promise<Array<{ name: string; type: string; summary: string; url?: string; confidence: number }>> {
+  const preferHistory = shouldPreferHistory(ctx);
   const results: Array<{ name: string; type: string; summary: string; url?: string; confidence: number }> = [];
 
   // 并发查询（限制并发数避免过载）
@@ -175,12 +247,15 @@ export async function factCheckEntities(
     const batch = entities.slice(i, i + batchSize);
     const batchResults = await Promise.all(
       batch.map(async (entity) => {
-        const searchResults = await searchWikipedia(`${entity.name} ${era || ''} 历史`);
+        const query = buildSearchQuery(entity, era, ctx);
+        let searchResults = await searchWikipedia(query);
+        searchResults = filterResults(searchResults, preferHistory);
+
         if (searchResults.length === 0) {
           return { ...entity, summary: '', url: undefined, confidence: 0 };
         }
 
-        // 取第一个结果的详细内容
+        // 取第一个过滤后的结果
         const article = await getWikiArticle(searchResults[0].title);
         const extract = article?.extract || searchResults[0].snippet;
         // 截取前300字作为摘要

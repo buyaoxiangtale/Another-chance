@@ -480,7 +480,7 @@ export default function StoryDetailPage({ params }: { params: { id: string } }) 
       )}
 
       {/* Story title */}
-      <div className={`max-w-3xl mx-auto px-6 pt-12 pb-8 text-center ${showDirectorSidebar ? 'lg:ml-72' : ''} ${showCharacterPanel ? 'lg:mr-72' : ''}`}>
+      <div className="max-w-3xl mx-auto px-6 pt-12 pb-8 text-center">
         <div className="divider-ornament mb-4"><span>✦</span></div>
         <h1 className="text-3xl md:text-4xl font-bold text-[var(--ink)] tracking-widest mb-3">{story.title}</h1>
         {story.description && <p className="text-[var(--muted)] text-sm">{story.description}</p>}
@@ -494,7 +494,7 @@ export default function StoryDetailPage({ params }: { params: { id: string } }) 
       </div>
 
       {/* Story content */}
-      <div className={`max-w-3xl mx-auto px-6 pb-20 ${showDirectorSidebar ? 'lg:ml-72' : ''} ${showCharacterPanel ? 'lg:mr-72' : ''}`}>
+      <div className="max-w-3xl mx-auto px-6 pb-20">
         <div className="flex gap-6">
           {/* Main content */}
           <div className="flex-1 min-w-0">

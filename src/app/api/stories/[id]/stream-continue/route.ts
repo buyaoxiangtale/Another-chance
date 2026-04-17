@@ -70,11 +70,16 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
 
     // 使用统一的 AI 客户端
     const { url, headers, body } = buildOpenAIRequest(prompt, undefined, maxTokens, story);
-    
+
+    // 启用流式响应
+    const bodyObj = JSON.parse(body);
+    bodyObj.stream = true;
+    const streamBody = JSON.stringify(bodyObj);
+
     const aiResponse = await fetch(url, {
       method: 'POST',
       headers,
-      body: body.replace('"stream": false', '"stream": true') // 启用流式响应
+      body: streamBody
     });
 
     if (!aiResponse.ok) {

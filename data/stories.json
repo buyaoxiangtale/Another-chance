@@ -66,5 +66,14 @@
     "rootSegmentId": "seg_1776401926668_7fpj7z8jb",
     "genre": "同人",
     "era": "火影忍者"
+  },
+  {
+    "id": "story_1776444664307_2aglm3coj",
+    "title": "三体",
+    "description": "在三体中，叶文洁最后没有摁下那个发射按钮，而是选择了原谅过去正常的生活",
+    "author": "mapi",
+    "createdAt": "2026-04-17T16:51:04.307Z",
+    "updatedAt": "2026-04-17T16:51:04.307Z",
+    "rootSegmentId": "seg_1776444664308_cka6i5o37"
   }
 ]

@@ -102,18 +102,34 @@ async function getOrderedChain(storyId: string, branchId: string): Promise<Story
     }
     return chain;
   } else {
-    // Non-main branch: start from the segment whose parent is the sourceSegmentId
+    // Non-main branch: include context from main chain up to source segment, then branch segments
     const branches = await branchesStore.load();
     const branch = branches.find(b => b.id === branchId);
     if (!branch) return [];
 
     const chain: StorySegment[] = [];
-    let current = storySegments.find(s => s.parentSegmentId === branch.sourceSegmentId);
-    const visited = new Set<string>();
-    while (current && !visited.has(current.id)) {
-      visited.add(current.id);
-      chain.push(current);
-      current = storySegments.find(s => s.parentSegmentId === current!.id);
+
+    // 1. Get main chain context up to (and including) the source segment
+    const mainSegments = segments.filter(s => s.storyId === storyId && s.branchId === 'main');
+    const mainChain: StorySegment[] = [];
+    let current = mainSegments.find(s => !s.parentSegmentId);
+    const visitedMain = new Set<string>();
+    while (current && !visitedMain.has(current.id)) {
+      visitedMain.add(current.id);
+      mainChain.push(current);
+      if (current.id === branch.sourceSegmentId) break;
+      current = mainSegments.find(s => s.parentSegmentId === current!.id);
+    }
+    chain.push(...mainChain);
+
+    // 2. Get branch segments
+    const branchSegments = segments.filter(s => s.storyId === storyId && s.branchId === branchId);
+    let branchCurrent = branchSegments.find(s => s.parentSegmentId === branch.sourceSegmentId);
+    const visitedBranch = new Set<string>();
+    while (branchCurrent && !visitedBranch.has(branchCurrent.id)) {
+      visitedBranch.add(branchCurrent.id);
+      chain.push(branchCurrent);
+      branchCurrent = branchSegments.find(s => s.parentSegmentId === branchCurrent!.id);
     }
     return chain;
   }

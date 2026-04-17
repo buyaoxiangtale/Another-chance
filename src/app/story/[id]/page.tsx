@@ -43,6 +43,11 @@ export default function StoryDetailPage({ params }: { params: { id: string } }) 
   const [showEditModal, setShowEditModal] = useState(false);
   const [editForm, setEditForm] = useState({ title: '', description: '', genre: '', era: '', author: '' });
   const [saving, setSaving] = useState(false);
+  // 段落编辑/删除
+  const [editingSegmentId, setEditingSegmentId] = useState<string | null>(null);
+  const [editingContent, setEditingContent] = useState('');
+  const [editingTitle, setEditingTitle] = useState('');
+  const [savingSegment, setSavingSegment] = useState(false);
   const [pacingConfig, setPacingConfig] = useState<PacingConfig>({ pace: 'detailed', maxLinesPerStep: 5 });
   const [isPaused, setIsPaused] = useState(false);
   const [suggestedDirections, setSuggestedDirections] = useState<Array<{ icon: string; label: string; desc: string }>>([]);
@@ -252,7 +257,10 @@ export default function StoryDetailPage({ params }: { params: { id: string } }) 
       setBranchPreview(data.segment?.content || '分叉剧情已生成');
       await new Promise(r => setTimeout(r, 500));
 
-      await loadBranchSegments(currentBranchId);
+      // 自动切换到新分支
+      if (data.branch?.id) {
+        setCurrentBranchId(data.branch.id);
+      }
       await loadTree();
       setShowBranchDialog(false);
       setBranchingSegmentId(null);
@@ -566,7 +574,32 @@ export default function StoryDetailPage({ params }: { params: { id: string } }) 
                           </div>
                         )}
 
-                        <div className="mt-4 pt-3 border-t border-[var(--border)]/50 flex justify-end">
+                        <div className="mt-4 pt-3 border-t border-[var(--border)]/50 flex justify-between">
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={() => { setEditingSegmentId(seg.id); setEditingContent(seg.content); setEditingTitle(seg.title || ''); }}
+                              className="p-1.5 text-xs text-[var(--muted)] hover:text-[var(--gold)] hover:bg-[var(--gold)]/5 rounded-lg transition-all"
+                              title="编辑段落"
+                            >✏️</button>
+                            {idx > 0 && (
+                              <button
+                                onClick={async () => {
+                                  if (!confirm(`确定删除这段内容吗？后续段落将重新链接到上一段。`)) return;
+                                  try {
+                                    const res = await fetch(`/api/stories/${id}/segments?segmentId=${seg.id}`, { method: 'DELETE' });
+                                    if (res.ok) {
+                                      loadBranchSegments(currentBranchId);
+                                    } else {
+                                      const data = await res.json();
+                                      alert(data.error || '删除失败');
+                                    }
+                                  } catch { alert('删除失败'); }
+                                }}
+                                className="p-1.5 text-xs text-[var(--muted)] hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
+                                title="删除段落"
+                              >🗑️</button>
+                            )}
+                          </div>
                           <button
                             onClick={() => handleBranch(seg.id)}
                             className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs text-[var(--muted)] hover:text-[var(--accent)] hover:bg-[var(--accent)]/5 rounded-lg transition-all group"
@@ -773,6 +806,62 @@ export default function StoryDetailPage({ params }: { params: { id: string } }) 
                 disabled={saving}
                 className="px-4 py-2 text-sm bg-amber-700 text-white rounded-lg hover:bg-amber-800 transition-colors disabled:opacity-50"
               >{saving ? '保存中...' : '保存'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 段落编辑弹窗 */}
+      {editingSegmentId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setEditingSegmentId(null)}>
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl mx-4 p-6 max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
+            <h2 className="text-lg font-bold text-[var(--ink)] mb-4">编辑段落</h2>
+            <div className="space-y-4 flex-1 overflow-y-auto">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">标题</label>
+                <input
+                  value={editingTitle}
+                  onChange={e => setEditingTitle(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">内容</label>
+                <textarea
+                  value={editingContent}
+                  onChange={e => setEditingContent(e.target.value)}
+                  rows={12}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none resize-none"
+                />
+              </div>
+            </div>
+            <div className="flex justify-end gap-3 mt-4">
+              <button
+                onClick={() => setEditingSegmentId(null)}
+                className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+              >取消</button>
+              <button
+                onClick={async () => {
+                  if (!editingContent.trim()) { alert('内容不能为空'); return; }
+                  setSavingSegment(true);
+                  try {
+                    const res = await fetch(`/api/stories/${id}/segments?segmentId=${editingSegmentId}`, {
+                      method: 'PATCH',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ content: editingContent, title: editingTitle }),
+                    });
+                    if (res.ok) {
+                      setEditingSegmentId(null);
+                      loadBranchSegments(currentBranchId);
+                    } else {
+                      alert('保存失败');
+                    }
+                  } catch { alert('保存失败'); }
+                  finally { setSavingSegment(false); }
+                }}
+                disabled={savingSegment || !editingContent.trim()}
+                className="px-4 py-2 text-sm bg-amber-700 text-white rounded-lg hover:bg-amber-800 transition-colors disabled:opacity-50"
+              >{savingSegment ? '保存中...' : '保存'}</button>
             </div>
           </div>
         </div>

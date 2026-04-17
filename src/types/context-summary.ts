@@ -15,6 +15,7 @@ export type SegmentSummary = {
   originalTokenCount: number;
   createdAt: string;
   updatedAt: string;
+  aiGenerated?: boolean; // 是否由 AI 生成
 };
 
 export type GroupSummary = {
@@ -25,6 +26,7 @@ export type GroupSummary = {
   stateChanges: string[];
   tokenCount: number;
   createdAt: string;
+  aiGenerated?: boolean; // 是否由 AI 生成
 };
 
 export type ChapterSummary = {

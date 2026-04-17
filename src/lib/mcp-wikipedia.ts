@@ -177,14 +177,14 @@ export function shouldPreferHistory(ctx?: StoryContext): boolean {
   if (!ctx?.genre) return true; // 默认优先正史
 
   const fictionKeywords = ['演义', '架空', '同人', '玄幻', '仙侠', '魔幻', '穿越', '重生', '武侠', '架空历史', '奇幻', '轻小说', '网文'];
-  const isFiction = fictionKeywords.some(k => ctx.genre.includes(k));
+  const isFiction = fictionKeywords.some(k => ctx.genre && ctx.genre.includes(k));
 
   if (isFiction) return false;
 
   // 即使是"正史"类型，如果描述中明确提到某部小说/影视，也标记下来
   if (ctx.description) {
     const fictionWorkKeywords = ['三国演义', '水浒传', '西游记', '红楼梦', '封神演义', '隋唐演义', '说岳全传', '东周列国志'];
-    const referencesFiction = fictionWorkKeywords.some(k => ctx.description.includes(k));
+    const referencesFiction = fictionWorkKeywords.some(k => ctx.description && ctx.description.includes(k));
     if (referencesFiction) return false;
   }
 

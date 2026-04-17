@@ -3,6 +3,7 @@ import { storiesStore, segmentsStore, getOrderedChain, type StorySegment } from 
 import { buildFullPrompt } from '@/lib/prompt-builder';
 import { PacingEngine } from '@/lib/pacing-engine';
 import { consistencyChecker } from '@/lib/consistency-checker';
+import { callAI, buildOpenAIRequest } from '@/lib/ai-client';
 
 /**
  * 5.2 + 5.4 + 5.5 改造 stream-continue route
@@ -80,27 +81,24 @@ ${contextSummary}
       warnings: consistencyWarnings.length > 0 ? consistencyWarnings : undefined,
     };
 
-    const baseUrl = process.env.AI_BASE_URL || 'https://open.bigmodel.cn/api/paas/v4';
-    const apiKey = process.env.AI_API_KEY || '';
-    const model = process.env.AI_MODEL || 'glm-5.1';
+    // 根据故事类型调整AI参数
+    const genre = (story as any)?.genre || '';
+    const fictionKeywords = ['演义', '架空', '同人', '玄幻', '仙侠', '魔幻', '穿越', '重生', '武侠', '奇幻', '轻小说', '网文'];
+    const isFiction = fictionKeywords.some(k => genre.includes(k));
+    const isHistory = genre.includes('正史') || genre.includes('历史') || !isFiction;
+    
+    // 根据故事类型设置temperature：正史类更严格，同人类允许更多创意
+    const temperature = isHistory ? 0.4 : (isFiction ? 0.6 : 0.5);
+    
     const maxTokens = pacingConfig?.pace === 'detailed' ? 4000 : 2000;
 
-    const aiResponse = await fetch(`${baseUrl}/chat/completions`, {
+    // 使用统一的 AI 客户端
+    const { url, headers, body } = buildOpenAIRequest(prompt, '你是一位精通中国历史的文学作家，擅长古典文学风格的写作。请用中文回答。', maxTokens, story);
+    
+    const aiResponse = await fetch(url, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model,
-        messages: [
-          { role: 'system', content: '你是一位精通中国历史的文学作家，擅长古典文学风格的写作。请用中文回答。' },
-          { role: 'user', content: prompt }
-        ],
-        temperature: 0.7,
-        max_tokens: maxTokens,
-        stream: true
-      })
+      headers,
+      body: body.replace('"stream": false', '"stream": true') // 启用流式响应
     });
 
     if (!aiResponse.ok) {

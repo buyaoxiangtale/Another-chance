@@ -18,10 +18,30 @@ function estimateTokens(text: string): number {
 /**
  * AI 调用方法，复用项目已有的 AI 调用配置
  */
-async function callAI(prompt: string, maxTokens: number = 1000, systemPrompt?: string): Promise<string> {
+async function callAI(prompt: string, maxTokens: number = 1000, systemPrompt?: string, genre?: string): Promise<string> {
   const baseUrl = process.env.AI_BASE_URL || 'https://api.openai.com/v1';
   const apiKey = process.env.AI_API_KEY || '';
   const model = process.env.AI_MODEL || 'gpt-3.5-turbo';
+
+  // 根据故事类型调整参数 (2.5)
+  let temperature = 0.5; // 默认值
+  let top_p = 0.85;
+  let frequency_penalty = 0.3;
+
+  if (genre) {
+    const fictionKeywords = ['演义', '架空', '同人', '玄幻', '仙侠', '魔幻', '穿越', '重生', '武侠', '架空历史', '奇幻', '轻小说', '网文'];
+    const isFiction = fictionKeywords.some(k => genre.includes(k));
+    
+    if (isFiction) {
+      // 同人类：允许更多创意
+      temperature = 0.6;
+      top_p = 0.9;
+    } else {
+      // 正史类：更严格，减少随机性
+      temperature = 0.4;
+      top_p = 0.8;
+    }
+  }
 
   const res = await fetch(`${baseUrl}/chat/completions`, {
     method: 'POST',
@@ -35,7 +55,9 @@ async function callAI(prompt: string, maxTokens: number = 1000, systemPrompt?: s
         { role: 'system', content: systemPrompt || '你是一位擅长文学创作的故事摘要专家。请用中文回答，提取故事段落的关键信息。' },
         { role: 'user', content: prompt }
       ],
-      temperature: 0.3, // 降低温度以获得更稳定的摘要
+      temperature,
+      top_p,
+      frequency_penalty,
       max_tokens: maxTokens
     })
   });
@@ -156,7 +178,7 @@ const AISUMMARY_PROMPT = `你是一位专业的故事摘要专家，擅长从文
 /**
  * 使用 AI 生成段落摘要（1.2 改造 extractSummaryFromSegment 为 generateAISummary）
  */
-async function generateAISummary(segment: StorySegment, chain: StorySegment[]): Promise<SegmentSummary> {
+async function generateAISummary(segment: StorySegment, chain: StorySegment[], genre?: string): Promise<SegmentSummary> {
   // 先尝试从缓存获取
   const all = await summariesStore.load();
   const cached = all.find(
@@ -171,7 +193,7 @@ async function generateAISummary(segment: StorySegment, chain: StorySegment[]): 
     const prompt = AISUMMARY_PROMPT.replace('{{content}}', segment.content);
     
     // 调用 AI 生成结构化摘要
-    const aiResponse = await callAI(prompt, 800);
+    const aiResponse = await callAI(prompt, 800, undefined, genre);
     
     // 解析 AI 返回的 JSON
     let summary: any;
@@ -269,8 +291,8 @@ class ContextSummarizer {
   /**
    * 1.2 对单个段落生成摘要（AI 驱动）
    */
-  async generateSegmentSummary(segment: StorySegment, chain: StorySegment[]): Promise<SegmentSummary> {
-    return await generateAISummary(segment, chain);
+  async generateSegmentSummary(segment: StorySegment, chain: StorySegment[], genre?: string): Promise<SegmentSummary> {
+    return await generateAISummary(segment, chain, genre);
   }
 
   /**
@@ -282,7 +304,8 @@ class ContextSummarizer {
     chain: StorySegment[],
     maxTokens: number,
     recentCount: number = 5, // 1.6 增加全文保留段落数：从3改为5
-    groupSize: number = 5
+    groupSize: number = 5,
+    genre?: string
   ): Promise<{ fullTextSegments: StorySegment[]; groupSummaries: GroupSummary[]; chapterSummaries: ChapterSummary[] }> {
     const fullTextSegments: StorySegment[] = [];
     const groupSummaries: GroupSummary[] = [];
@@ -318,7 +341,7 @@ class ContextSummarizer {
     }
 
     // 1.7 改进组级摘要：每组摘要从简单拼接改为 AI 生成连贯摘要
-    const aiGroupSummaries = await this.generateAIGroupSummaries(olderSummaries, groupSize, remainingTokens);
+    const aiGroupSummaries = await this.generateAIGroupSummaries(olderSummaries, groupSize, remainingTokens, genre);
 
     // 构建组级摘要
     for (const groupSummary of aiGroupSummaries) {
@@ -348,7 +371,7 @@ class ContextSummarizer {
   /**
    * 1.7 AI 生成连贯的组级摘要
    */
-  private async generateAIGroupSummaries(summaries: SegmentSummary[], groupSize: number, tokenBudget: number): Promise<GroupSummary[]> {
+  private async generateAIGroupSummaries(summaries: SegmentSummary[], groupSize: number, tokenBudget: number, genre?: string): Promise<GroupSummary[]> {
     const groups: GroupSummary[] = [];
     
     for (let i = 0; i < summaries.length; i += groupSize) {
@@ -375,7 +398,7 @@ ${groupTexts}
 
 请只输出合并后的摘要文本：`;
 
-        const aiResponse = await callAI(prompt, 300);
+        const aiResponse = await callAI(prompt, 300, undefined, genre);
         
         const label = `段落 ${i + 1}-${Math.min(i + groupSize, summaries.length)}`;
         const groupSummary: GroupSummary = {

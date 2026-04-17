@@ -1,0 +1,98 @@
+[
+  {
+    "segmentId": "seg_1776399252883_78nwek28a",
+    "storyId": "story_1776399252883_l72ilsmxx",
+    "branchId": "main",
+    "chainIndex": 0,
+    "summaryText": "【带土的重生·开篇】\n《带土的重生》的故事开始了...",
+    "characterActions": [],
+    "keyEvents": [],
+    "stateChanges": [],
+    "tokenCount": 15,
+    "originalTokenCount": 9,
+    "createdAt": "2026-04-17T04:23:10.985Z",
+    "updatedAt": "2026-04-17T04:23:10.985Z"
+  },
+  {
+    "segmentId": "seg_1776399294661_6d404e",
+    "storyId": "story_1776399252883_l72ilsmxx",
+    "branchId": "main",
+    "chainIndex": 1,
+    "summaryText": "【故事续写】\n晨光熹微，霜钟初叩。带土自昏沉中猛然惊觉，额间冷汗涔涔，宛若自幽冥血海还魂。他急促喘息，双手本能地扣向心口，却触得一具稚嫩孱弱之躯。九岁之龄，经脉未充，然其双瞳深处，神威与轮回之瞳力蛰伏如渊，幽芒暗藏...\n节奏：detailed",
+    "characterActions": [],
+    "keyEvents": [],
+    "stateChanges": [
+      "节奏：detailed"
+    ],
+    "tokenCount": 70,
+    "originalTokenCount": 203,
+    "createdAt": "2026-04-17T04:49:51.242Z",
+    "updatedAt": "2026-04-17T04:49:51.242Z"
+  },
+  {
+    "segmentId": "seg_1776401926668_7fpj7z8jb",
+    "storyId": "story_1776401926668_wt100dv7t",
+    "branchId": "main",
+    "chainIndex": 0,
+    "summaryText": "【宇智波带土的重生·开篇】\n《宇智波带土的重生》的故事开始了...",
+    "characterActions": [],
+    "keyEvents": [],
+    "stateChanges": [],
+    "tokenCount": 19,
+    "originalTokenCount": 11,
+    "createdAt": "2026-04-17T05:20:32.592Z",
+    "updatedAt": "2026-04-17T05:20:32.592Z"
+  },
+  {
+    "segmentId": "seg_1776401989217_0kp60y",
+    "storyId": "story_1776401926668_wt100dv7t",
+    "branchId": "main",
+    "chainIndex": 1,
+    "summaryText": "【故事续写】\n晨光熹微，透过木棱窗格斜斜漏进屋内，细碎的浮尘在光柱中无声游走。宇智波带土猛然睁眼，胸膛剧烈起伏，仿佛刚从无间深渊中挣脱。他下意识抬手去捂左半身，指尖触及的却不是血肉模糊的创口，而是一片温热完好的肌肤...\n关键事件：那本该在琳死后才泣血开启的万花筒写轮眼，此刻正蛰伏在稚嫩的眼睑之下，幽暗的瞳孔中隐隐流转着猩红的勾玉，如宿命的咒印，昭示着前世半生痴妄与癫狂并非大梦一场。\n节奏：detailed",
+    "characterActions": [],
+    "keyEvents": [
+      "那本该在琳死后才泣血开启的万花筒写轮眼，此刻正蛰伏在稚嫩的眼睑之下，幽暗的瞳孔中隐隐流转着猩红的勾玉，如宿命的咒印，昭示着前世半生痴妄与癫狂并非大梦一场。"
+    ],
+    "stateChanges": [
+      "节奏：detailed"
+    ],
+    "tokenCount": 124,
+    "originalTokenCount": 234,
+    "createdAt": "2026-04-17T05:21:38.886Z",
+    "updatedAt": "2026-04-17T05:21:38.886Z"
+  },
+  {
+    "segmentId": "seg_1776402672928_dlkg2t",
+    "storyId": "story_1776401926668_wt100dv7t",
+    "branchId": "main",
+    "chainIndex": 2,
+    "summaryText": "【故事续写】\n带土缓缓坐起身，榻榻米散发着陈年蔺草的微涩气息，那是属于幼年宇智波家宅独有的味道。他偏过头，目光落在墙角那面斑驳的铜镜上。镜中映出的，是一张圆润稚气的脸庞，漆黑的短发略显凌乱，唯有眼角那道泪沟般的纹路...\n节奏：detailed",
+    "characterActions": [],
+    "keyEvents": [],
+    "stateChanges": [
+      "节奏：detailed"
+    ],
+    "tokenCount": 72,
+    "originalTokenCount": 250,
+    "createdAt": "2026-04-17T05:22:19.063Z",
+    "updatedAt": "2026-04-17T05:22:19.063Z"
+  },
+  {
+    "segmentId": "seg_1776403213420_1zmc68",
+    "storyId": "story_1776401926668_wt100dv7t",
+    "branchId": "main",
+    "chainIndex": 3,
+    "summaryText": "【故事续写】\n门外，木叶的街巷正从沉睡中苏醒。青石板路上还凝着昨夜的露华，倒映着天边初绽的绯红。带土缓步踏出，每一步都似踩在虚幻与真实的交界。街角蒸笼里腾起的白雾裹挟着红豆包的甜香，早起的主妇在檐下扫洒，远处铁匠铺...\n关键事件：街角蒸笼里腾起的白雾裹挟着红豆包的甜香，早起的主妇在檐下扫洒，远处铁匠铺传来“叮当”的脆响——这便是他曾亲手毁弃、又拼死护过的木叶，人间烟火，竟是这般刺目地鲜活。\n节奏：detailed",
+    "characterActions": [],
+    "keyEvents": [
+      "街角蒸笼里腾起的白雾裹挟着红豆包的甜香，早起的主妇在檐下扫洒，远处铁匠铺传来“叮当”的脆响——这便是他曾亲手毁弃、又拼死护过的木叶，人间烟火，竟是这般刺目地鲜活。"
+    ],
+    "stateChanges": [
+      "节奏：detailed"
+    ],
+    "tokenCount": 125,
+    "originalTokenCount": 207,
+    "createdAt": "2026-04-17T05:22:55.813Z",
+    "updatedAt": "2026-04-17T05:22:55.813Z"
+  }
+]

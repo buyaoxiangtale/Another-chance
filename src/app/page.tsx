@@ -24,7 +24,31 @@ interface Story {
   characterCount?: number;
 }
 
-function StoryCard({ story, index }: { story: Story; index: number }) {
+function StoryCard({ story, index, onDelete }: { story: Story; index: number; onDelete: (id: string) => void }) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  const handleDelete = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!confirm(`确定要删除故事「${story.title}」吗？此操作不可恢复。`)) return;
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/stories/${story.id}`, { method: 'DELETE' });
+      if (res.ok) {
+        onDelete(story.id);
+      } else {
+        const data = await res.json();
+        alert(data.error || '删除失败');
+      }
+    } catch {
+      alert('删除失败');
+    } finally {
+      setDeleting(false);
+      setMenuOpen(false);
+    }
+  };
+
   const eraMap: Record<string, { era: string; icon: string; gradient: string }> = {
     '荆轲刺秦王': { era: '战国', icon: '🗡️', gradient: 'from-amber-800 to-red-900' },
     '赤壁之战': { era: '三国', icon: '🔥', gradient: 'from-blue-800 to-indigo-900' },
@@ -46,9 +70,43 @@ function StoryCard({ story, index }: { story: Story; index: number }) {
               <span>{meta.icon}</span>
               {meta.era}
             </span>
-            <span className="text-xs text-[var(--muted)]">
-              {new Date(story.createdAt).toLocaleDateString('zh-CN')}
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-[var(--muted)]">
+                {new Date(story.createdAt).toLocaleDateString('zh-CN')}
+              </span>
+              <div className="relative">
+                <button
+                  onClick={(e) => { e.preventDefault(); e.stopPropagation(); setMenuOpen(!menuOpen); }}
+                  className="p-1 text-[var(--muted)] hover:text-[var(--ink)] rounded transition-colors"
+                  title="更多操作"
+                >
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                    <circle cx="8" cy="3" r="1.5"/><circle cx="8" cy="8" r="1.5"/><circle cx="8" cy="13" r="1.5"/>
+                  </svg>
+                </button>
+                {menuOpen && (
+                  <>
+                    <div className="fixed inset-0 z-10" onClick={(e) => { e.preventDefault(); e.stopPropagation(); setMenuOpen(false); }} />
+                    <div className="absolute right-0 top-full mt-1 z-20 w-36 bg-white rounded-lg shadow-lg border border-gray-200 py-1">
+                      <Link
+                        href={`/story/${story.id}?edit=true`}
+                        onClick={(e) => e.stopPropagation()}
+                        className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                      >
+                        ✏️ 编辑信息
+                      </Link>
+                      <button
+                        onClick={handleDelete}
+                        disabled={deleting}
+                        className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 disabled:opacity-50"
+                      >
+                        {deleting ? '删除中...' : '🗑️ 删除故事'}
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
           </div>
 
           <h3 className="text-xl font-bold text-[var(--ink)] mb-2 tracking-wide">{story.title}</h3>
@@ -136,6 +194,10 @@ export default function Home() {
   const [stories, setStories] = useState<Story[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const handleDeleteStory = (storyId: string) => {
+    setStories(prev => prev.filter(s => s.id !== storyId));
+  };
 
   useEffect(() => {
     const loadStories = async () => {
@@ -239,7 +301,7 @@ export default function Home() {
         {!loading && !error && stories.length > 0 && (
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
             {stories.map((story, i) => (
-              <StoryCard key={story.id} story={story} index={i} />
+              <StoryCard key={story.id} story={story} index={i} onDelete={handleDeleteStory} />
             ))}
           </div>
         )}

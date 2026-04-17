@@ -40,6 +40,9 @@ export default function StoryDetailPage({ params }: { params: { id: string } }) 
   const [showCharacterPanel, setShowCharacterPanel] = useState(false);
   const [showDirectorSidebar, setShowDirectorSidebar] = useState(false);
   const [showTimeline, setShowTimeline] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editForm, setEditForm] = useState({ title: '', description: '', genre: '', era: '', author: '' });
+  const [saving, setSaving] = useState(false);
   const [pacingConfig, setPacingConfig] = useState<PacingConfig>({ pace: 'detailed', maxLinesPerStep: 5 });
   const [isPaused, setIsPaused] = useState(false);
   const [suggestedDirections, setSuggestedDirections] = useState<Array<{ icon: string; label: string; desc: string }>>([]);
@@ -77,6 +80,13 @@ export default function StoryDetailPage({ params }: { params: { id: string } }) 
         const treeData = await treeRes.json();
         
         setStory(sData.story);
+        setEditForm({
+          title: sData.story.title || '',
+          description: sData.story.description || '',
+          genre: sData.story.genre || '',
+          era: sData.story.era || '',
+          author: sData.story.author || '',
+        });
         setBranches(treeData.branches || []);
         setCurrentBranchId('main');
       } catch (e) {
@@ -447,6 +457,11 @@ export default function StoryDetailPage({ params }: { params: { id: string } }) 
               </div>
             </div>
             <h1 className="text-sm font-bold text-[var(--ink)] tracking-wider">{story.title}</h1>
+            <button
+              onClick={() => setShowEditModal(true)}
+              className="p-1.5 rounded-lg text-xs text-[var(--muted)] hover:bg-gray-100 transition-all"
+              title="编辑故事信息"
+            >✏️</button>
           </div>
         </div>
       </nav>
@@ -668,6 +683,100 @@ export default function StoryDetailPage({ params }: { params: { id: string } }) 
       </div>
 
       {showBranchDialog && <BranchDialog />}
+
+      {/* 编辑故事信息弹窗 */}
+      {showEditModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setShowEditModal(false)}>
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md mx-4 p-6" onClick={e => e.stopPropagation()}>
+            <h2 className="text-lg font-bold text-[var(--ink)] mb-4">编辑故事信息</h2>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">标题</label>
+                <input
+                  value={editForm.title}
+                  onChange={e => setEditForm(f => ({ ...f, title: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">描述</label>
+                <textarea
+                  value={editForm.description}
+                  onChange={e => setEditForm(f => ({ ...f, description: e.target.value }))}
+                  rows={3}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none resize-none"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">类型</label>
+                  <select
+                    value={editForm.genre}
+                    onChange={e => setEditForm(f => ({ ...f, genre: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none"
+                  >
+                    <option value="">自动识别</option>
+                    <option value="正史">正史</option>
+                    <option value="演义">演义</option>
+                    <option value="同人">同人</option>
+                    <option value="架空">架空</option>
+                    <option value="玄幻">玄幻</option>
+                    <option value="仙侠">仙侠</option>
+                    <option value="穿越">穿越</option>
+                    <option value="武侠">武侠</option>
+                    <option value="奇幻">奇幻</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">时代</label>
+                  <input
+                    value={editForm.era}
+                    onChange={e => setEditForm(f => ({ ...f, era: e.target.value }))}
+                    placeholder="如：战国、三国"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">作者</label>
+                <input
+                  value={editForm.author}
+                  onChange={e => setEditForm(f => ({ ...f, author: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none"
+                />
+              </div>
+            </div>
+            <div className="flex justify-end gap-3 mt-6">
+              <button
+                onClick={() => setShowEditModal(false)}
+                className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+              >取消</button>
+              <button
+                onClick={async () => {
+                  setSaving(true);
+                  try {
+                    const res = await fetch(`/api/stories/${id}`, {
+                      method: 'PATCH',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify(editForm),
+                    });
+                    if (res.ok) {
+                      const data = await res.json();
+                      setStory(data.story);
+                      setShowEditModal(false);
+                    } else {
+                      alert('保存失败');
+                    }
+                  } catch { alert('保存失败'); }
+                  finally { setSaving(false); }
+                }}
+                disabled={saving}
+                className="px-4 py-2 text-sm bg-amber-700 text-white rounded-lg hover:bg-amber-800 transition-colors disabled:opacity-50"
+              >{saving ? '保存中...' : '保存'}</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

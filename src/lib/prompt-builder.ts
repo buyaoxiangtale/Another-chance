@@ -117,8 +117,50 @@ export async function buildFullPrompt(options: BuildPromptOptions): Promise<stri
   const budgets = allocateTokenBudget(tokenBudget);
   const parts: string[] = [];
 
-  // ─── 1. 系统指令 (fixed) ───
-  parts.push('你是一位精通中国历史的文学作家，擅长古典文学风格的写作。请用中文回答，保持与前文的风格和情节连续性。');
+  // 提前查询 story（多处需要用到）
+  const story = (await storiesStore.load()).find((s: any) => s.id === storyId);
+  const rawGenre = (story as any)?.genre || '';
+  const description = (story as any)?.description || storyDescription || '';
+
+  // 从 description 自动推断 genre（如果用户没填）
+  const INFER_PATTERNS: Record<string, string[]> = {
+    '同人': ['火影', '鸣人', '佐助', '带土', '卡卡西', '写轮眼', '查克拉', '木叶', '轮回眼',
+            '海贼', '路飞', '恶魔果实', '七武海',
+            '龙珠', '悟空', '贝吉塔', '超级赛亚人',
+            '死神', '一护', '斩魄刀', '护廷十三队',
+            '柯南', '灰原', '小兰', '毛利',
+            '哈利', '波特', '霍格沃茨', '伏地魔',
+            '漫威', '钢铁侠', '蜘蛛侠', '复仇者',
+            'DC', '蝙蝠侠', '超人', '正义联盟',
+            '原神', '钟离', '雷电', '旅行者', '提瓦特'],
+    '玄幻': ['修仙', '修真', '灵力', '灵气', '元婴', '金丹', '飞升', '天劫', '仙尊', '魔尊', '剑修', '丹药'],
+    '仙侠': ['剑仙', '仙人', '天庭', '妖魔', '渡劫', '法宝', '符箓'],
+    '穿越': ['重生', '穿越', '回到', '前世', '来世', '回到过去', '穿越回'],
+    '武侠': ['武功', '内力', '轻功', '江湖', '侠客', '门派', '武功秘籍', '掌门'],
+    '架空': ['架空', '异世界', '平行世界', '位面', '另一个世界'],
+  };
+
+  let inferredGenre = '';
+  if (!rawGenre) {
+    for (const [genre, keywords] of Object.entries(INFER_PATTERNS)) {
+      if (keywords.some(k => description.includes(k))) {
+        inferredGenre = genre;
+        break;
+      }
+    }
+  }
+  const effectiveGenre = rawGenre || inferredGenre;
+  const fictionKeywords = ['演义', '架空', '同人', '玄幻', '仙侠', '魔幻', '穿越', '重生', '武侠', '奇幻', '轻小说', '网文'];
+  const isFiction = fictionKeywords.some(k => effectiveGenre.includes(k));
+  const styleInstruction = isFiction
+    ? `你是一位擅长历史题材的文学作家。请用现代白话文写作，语言流畅生动，可适度使用古风词汇增加氛围感。保持与前文的风格和情节连续性。`
+    : '你是一位精通中国历史的文学作家，擅长古典文学风格的写作。请用半文半白的古风文体写作，保持与前文的风格和情节连续性。';
+  parts.push(styleInstruction);
+
+  // 如果自动推断出了 genre，在 prompt 中明确告知 AI
+  if (inferredGenre && !rawGenre) {
+    parts.push(`【重要】本作品类型为"${inferredGenre}"，请严格遵循故事描述中的世界观设定，不要将其与真实历史混淆。`);
+  }
 
   // ─── 2. 故事元信息 (fixed) ───
   const metaLines = [`故事标题：${storyTitle}`];
@@ -126,7 +168,6 @@ export async function buildFullPrompt(options: BuildPromptOptions): Promise<stri
   parts.push(metaLines.join('\n'));
 
   // ─── 3. 角色状态 (dynamic budget) ───
-  const story = (await storiesStore.load()).find((s: any) => s.id === storyId);
   const characterIds: string[] = (story as any)?.characterIds || [];
   const activeCharIds = new Set<string>();
   for (const seg of chain) {
@@ -186,11 +227,21 @@ const eventTracker = new EventTracker();
   }
 
   // ─── 7. 世界观 — 时间轴 + Lorebook (dynamic budget) ───
+  // 同人/玄幻等架空作品不注入历史 Lorebook，避免世界观冲突
   try {
     const timeline = await timelineEngine.getTimeline(storyId, branchId);
-    const era = (story as any)?.era;
-    const loreEntries = era ? await lorebook.getEntries(era) : await lorebook.getAll();
-    const timelinePrompt = buildTimelinePrompt(timeline, loreEntries);
+    let timelinePrompt = '';
+    if (!isFiction) {
+      const era = (story as any)?.era;
+      const loreEntries = era ? await lorebook.getEntries(era) : await lorebook.getAll();
+      timelinePrompt = buildTimelinePrompt(timeline, loreEntries);
+    } else if (timeline.length > 0) {
+      // 虚构作品只保留时间轴，不注入历史 Lorebook
+      timelinePrompt = '## 时间线\n' + timeline.map(e => {
+        const season = e.season ? `·${e.season}` : '';
+        return `- ${e.description}${season}`;
+      }).join('\n');
+    }
     if (timelinePrompt.trim()) {
       parts.push(timelinePrompt);
     }
@@ -236,7 +287,10 @@ const eventTracker = new EventTracker();
   const wordHint = pacingConfig
     ? new PacingEngine(pacingConfig).getWordInstruction()
     : '请续写下一段（150-300字）';
-  parts.push(`${wordHint}，保持古典文学风格，与前文情节连续。`);
+  const styleHint = isFiction
+    ? ''
+    : '，保持古典文学风格';
+  parts.push(`${wordHint}${styleHint}，与前文情节连续。`);
 
   // ─── Assemble & enrich with facts ───
   const fullPrompt = parts.join('\n\n');
@@ -249,6 +303,6 @@ const eventTracker = new EventTracker();
     }
   }
 
-  const enriched = await enrichPromptWithFacts(fullPrompt, entities);
+  const enriched = await enrichPromptWithFacts(fullPrompt, entities, { genre: effectiveGenre, era: (story as any)?.era });
   return enriched;
 }

@@ -41,3 +41,7 @@ yarn-error.log*
 next-env.d.ts
 Docs/todos_*.md
 .cron/
+
+# Execution cron
+.cron/
+.ops/

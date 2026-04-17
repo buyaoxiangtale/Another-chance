@@ -4,37 +4,7 @@ import { buildFullPrompt } from '@/lib/prompt-builder';
 import { directorManager } from '@/lib/director-manager';
 import { timelineEngine } from '@/lib/timeline-engine';
 import { consistencyChecker } from '@/lib/consistency-checker';
-
-async function callAI(prompt: string, maxTokens: number = 2000): Promise<string> {
-  const baseUrl = process.env.AI_BASE_URL || 'https://api.openai.com/v1';
-  const apiKey = process.env.AI_API_KEY || '';
-  const model = process.env.AI_MODEL || 'gpt-3.5-turbo';
-
-  const res = await fetch(`${baseUrl}/chat/completions`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model,
-      messages: [
-        { role: 'system', content: '你是一位精通中国历史的文学作家，擅长古典文学风格的写作。请用中文回答，保持与前文的风格和情节连续性。' },
-        { role: 'user', content: prompt }
-      ],
-      temperature: 0.7,
-      max_tokens: maxTokens
-    })
-  });
-
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`AI API error ${res.status}: ${text}`);
-  }
-
-  const data = await res.json();
-  return data.choices?.[0]?.message?.content || '';
-}
+import { callAIText } from '@/lib/ai-client';
 
 /**
  * 5.1 改造 continue route — 支持 pacingConfig 和 directorOverrides 参数
@@ -97,6 +67,13 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       });
     } else {
       // 向后兼容：不传 pacingConfig 时使用原始逻辑
+      const genre = (story as any)?.genre || '';
+      const fictionKeywords = ['演义', '架空', '同人', '玄幻', '仙侠', '魔幻', '穿越', '重生', '武侠', '奇幻', '轻小说', '网文'];
+      const isFiction = fictionKeywords.some(k => genre.includes(k));
+      const styleHint = isFiction
+        ? '请用现代白话文续写'
+        : '请用古风文体续写';
+
       const contextSummary = chain.map((s: StorySegment) =>
         `${s.title ? `【${s.title}】` : ''}${s.content}`
       ).join('\n');
@@ -107,12 +84,16 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
 当前故事进展：
 ${contextSummary}
 
-请续写下一段（150-300字），保持古典文学风格，与前文情节连续。`;
+${styleHint}下一段（150-300字），与前文情节连续。`;
     }
 
     // 根据 pacingConfig 调整 max_tokens
     const maxTokens = pacingConfig?.pace === 'detailed' ? 4000 : 2000;
-    const aiResponse = await callAI(prompt, maxTokens);
+    const aiResponse = await callAIText(prompt, {
+      systemPrompt: '你是一位擅长中国历史题材的文学作家。请用中文回答，保持与前文的风格和情节连续性。',
+      maxTokens,
+      story
+    });
 
     const segments = await segmentsStore.load();
     const newSegment: StorySegment = {

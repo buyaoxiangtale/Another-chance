@@ -96,6 +96,19 @@ ${styleHint}下一段（150-300字），与前文情节连续。`;
     });
 
     const segments = await segmentsStore.load();
+
+    // 检查 AI 返回内容是否为空
+    if (!aiResponse || aiResponse.trim().length === 0) {
+      return NextResponse.json({
+        success: false,
+        error: 'AI 未生成有效内容，请重试',
+        warnings: {
+          consistency: consistencyWarnings,
+          timeline: timelineWarnings,
+        }
+      }, { status: 500 });
+    }
+
     const newSegment: StorySegment = {
       id: `seg_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
       storyId,

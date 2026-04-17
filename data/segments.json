@@ -264,18 +264,6 @@
     "parentSegmentId": "seg_xw_2"
   },
   {
-    "id": "seg_wl_1",
-    "title": "卧龙没有出山",
-    "content": "",
-    "isBranchPoint": false,
-    "storyId": "story_1775994497022_q94ao4wql",
-    "imageUrls": [],
-    "createdAt": "2026-04-12T11:48:17.022Z",
-    "updatedAt": "2026-04-12T11:48:17.022Z",
-    "branchId": "main",
-    "parentSegmentId": ""
-  },
-  {
     "id": "seg_1776068623545_lt3bvv",
     "storyId": "story_1_荆轲刺秦王",
     "title": "故事续写",
@@ -677,31 +665,5 @@
     "imageUrls": [],
     "createdAt": "2026-04-17T11:07:36.024Z",
     "updatedAt": "2026-04-17T11:07:36.024Z"
-  },
-  {
-    "id": "seg_1776424088226_18ym3e",
-    "storyId": "story_1776401926668_wt100dv7t",
-    "title": "故事续写",
-    "content": "",
-    "isBranchPoint": false,
-    "branchId": "branch_1776424006628_nwbspy",
-    "parentSegmentId": "seg_1776424056024_hiz65p",
-    "imageUrls": [],
-    "narrativePace": "detailed",
-    "createdAt": "2026-04-17T11:08:08.226Z",
-    "updatedAt": "2026-04-17T11:08:08.226Z"
-  },
-  {
-    "id": "seg_1776429854621_np74wz",
-    "storyId": "story_1776401926668_wt100dv7t",
-    "title": "故事续写",
-    "content": "",
-    "isBranchPoint": false,
-    "branchId": "branch_1776424006628_nwbspy",
-    "parentSegmentId": "seg_1776424088226_18ym3e",
-    "imageUrls": [],
-    "narrativePace": "detailed",
-    "createdAt": "2026-04-17T12:44:14.621Z",
-    "updatedAt": "2026-04-17T12:44:14.621Z"
   }
 ]

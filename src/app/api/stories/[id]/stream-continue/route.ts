@@ -167,6 +167,15 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
             updatedAt: new Date().toISOString()
           };
 
+          // 检查内容是否为空
+          if (!fullContent || fullContent.trim().length === 0) {
+            const errorEvent = { type: 'error', message: 'AI 未生成有效内容，请重试' };
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify(errorEvent)}\n\n`));
+            controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+            controller.close();
+            return;
+          }
+
           allSegments.push(newSegment);
           await segmentsStore.save(allSegments);
 

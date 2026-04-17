@@ -20,21 +20,25 @@
 ## 技术栈
 
 ### 前端
+
 - **Next.js 13** (App Router)
 - **TypeScript**
 - **TailwindCSS**
 - **React 18**
 
 ### 后端
+
 - **Next.js API Routes**
 - **JSON 文件存储** (`src/lib/simple-db.ts`) — 数据存放在 `data/` 目录
 - **Prisma** — Schema 定义预留，当前运行时未使用
 
 ### AI 集成
+
 - **OpenAI-compatible API** 支持
 - 文本续写与图片生成
 
 ### 部署
+
 - **Docker** 容器化部署
 - **Docker Compose** 编排（含 Redis、Nginx）
 - **Capacitor** 移动端支持（iOS/Android）
@@ -49,31 +53,36 @@
 ### 安装步骤
 
 1. **克隆项目**
+
 ```bash
 git clone https://github.com/buyaoxiangtale/Another-chance.git
 cd gushi
 ```
 
 2. **安装依赖**
+
 ```bash
 npm install
 ```
 
 3. **环境配置**
+
 ```bash
 cp .env.example .env.local
 # 编辑 .env.local，填入 AI_API_KEY 和 AI_BASE_URL
 ```
 
 4. **初始化数据**
+
 ```bash
 mkdir -p data
-node seed.js          # 基础种子数据（3个故事）
+npx tsx seed.js          # 基础种子数据（3个故事）
 # 或使用更丰富的数据：
-# node prisma/seed.ts  # 含角色、时间轴、设定集的完整数据
+# npx tsx prisma/seed.ts  # 含角色、时间轴、设定集的完整数据
 ```
 
 5. **启动开发服务器**
+
 ```bash
 npm run dev
 ```
@@ -125,20 +134,21 @@ gushi/
 
 项目使用 JSON 文件存储数据（`src/lib/simple-db.ts`），数据文件位于 `data/` 目录：
 
-| 文件 | 说明 |
-|------|------|
-| `stories.json` | 故事列表 |
-| `segments.json` | 故事段落 |
-| `branches.json` | 分叉节点 |
-| `characters.json` | 角色数据 |
-| `historical-references.json` | 历史引用 |
-| `director-states.json` | 导演模式状态 |
-| `lorebook.json` | 设定集 |
-| `knowledge-cache.json` | 知识缓存 |
+| 文件                           | 说明         |
+| ------------------------------ | ------------ |
+| `stories.json`               | 故事列表     |
+| `segments.json`              | 故事段落     |
+| `branches.json`              | 分叉节点     |
+| `characters.json`            | 角色数据     |
+| `historical-references.json` | 历史引用     |
+| `director-states.json`       | 导演模式状态 |
+| `lorebook.json`              | 设定集       |
+| `knowledge-cache.json`       | 知识缓存     |
 
 ### 数据模型
 
 #### Story (故事)
+
 ```typescript
 interface Story {
   id: string;
@@ -154,6 +164,7 @@ interface Story {
 ```
 
 #### StorySegment (故事段落)
+
 ```typescript
 interface StorySegment {
   id: string;
@@ -174,6 +185,7 @@ interface StorySegment {
 ```
 
 #### StoryBranch (分叉节点)
+
 ```typescript
 interface StoryBranch {
   id: string;
@@ -202,25 +214,25 @@ AI_MODEL=gpt-3.5-turbo
 
 ## API 端点
 
-| 端点 | 方法 | 说明 |
-|------|------|------|
-| `/api/stories` | GET/POST | 故事列表 / 创建故事 |
-| `/api/stories/[id]` | GET/DELETE | 获取 / 删除故事 |
-| `/api/stories/[id]/segments` | GET | 获取段落列表 |
-| `/api/stories/[id]/tree` | GET | 获取故事树结构 |
-| `/api/stories/[id]/branch` | POST | 创建分叉 |
-| `/api/stories/[id]/continue` | POST | AI 续写 |
-| `/api/stories/[id]/stream-continue` | POST | 流式 AI 续写 |
-| `/api/stories/[id]/characters` | GET/POST | 角色管理 |
-| `/api/characters/[id]` | GET/PATCH/DELETE | 单角色操作 |
-| `/api/stories/[id]/timeline` | GET/POST | 时间轴操作 |
-| `/api/stories/[id]/director` | GET/PATCH | 导演模式 |
-| `/api/lorebook` | GET/POST | 设定集 |
-| `/api/fandom-lorebook` | GET | Fandom 设定集 |
-| `/api/knowledge/search` | GET | 历史知识搜索 |
-| `/api/knowledge/factcheck` | POST | 事实核查 |
-| `/api/images` | GET | 图片列表 |
-| `/api/images/generate` | POST | 生成图片 |
+| 端点                                  | 方法             | 说明                |
+| ------------------------------------- | ---------------- | ------------------- |
+| `/api/stories`                      | GET/POST         | 故事列表 / 创建故事 |
+| `/api/stories/[id]`                 | GET/DELETE       | 获取 / 删除故事     |
+| `/api/stories/[id]/segments`        | GET              | 获取段落列表        |
+| `/api/stories/[id]/tree`            | GET              | 获取故事树结构      |
+| `/api/stories/[id]/branch`          | POST             | 创建分叉            |
+| `/api/stories/[id]/continue`        | POST             | AI 续写             |
+| `/api/stories/[id]/stream-continue` | POST             | 流式 AI 续写        |
+| `/api/stories/[id]/characters`      | GET/POST         | 角色管理            |
+| `/api/characters/[id]`              | GET/PATCH/DELETE | 单角色操作          |
+| `/api/stories/[id]/timeline`        | GET/POST         | 时间轴操作          |
+| `/api/stories/[id]/director`        | GET/PATCH        | 导演模式            |
+| `/api/lorebook`                     | GET/POST         | 设定集              |
+| `/api/fandom-lorebook`              | GET              | Fandom 设定集       |
+| `/api/knowledge/search`             | GET              | 历史知识搜索        |
+| `/api/knowledge/factcheck`          | POST             | 事实核查            |
+| `/api/images`                       | GET              | 图片列表            |
+| `/api/images/generate`              | POST             | 生成图片            |
 
 ## 开发脚本
 
@@ -249,11 +261,13 @@ npm run mobile:run         # 运行移动端
 ## Docker 部署
 
 ### 开发环境
+
 ```bash
 docker-compose up gushi-dev
 ```
 
 ### 生产环境
+
 ```bash
 docker-compose up -d gushi-app
 docker-compose logs -f gushi-app
@@ -262,11 +276,13 @@ docker-compose logs -f gushi-app
 ## 使用指南
 
 ### 阅读故事
+
 1. 在首页选择一个历史故事
 2. 按时间顺序阅读故事段落
 3. 在分叉点选择不同的故事走向
 
 ### 创建分叉
+
 1. 点击故事中的分叉点
 2. 选择分叉方向（alternate/different/extended）
 3. 系统自动生成新的故事分支
@@ -276,11 +292,13 @@ docker-compose logs -f gushi-app
 **创建角色：** 在故事详情页的角色面板中添加角色，填写姓名、朝代、角色定位、性格特质、口癖和核心动机。角色会自动关联到续写 prompt。
 
 **使用导演模式：** 打开故事详情页的导演侧边栏，可以：
+
 - 修改角色当前状态（如"受伤"、"愤怒"）
 - 设置世界变量（如"天气：暴雨"、"时间：深夜"）
 - 添加叙事约束（如"不得出现火器"）
 
 **控制节奏：** 在续写时选择节奏参数：
+
 - `detailed`：详细叙事，适合高潮场景
 - `rush`：快节奏，适合过渡场景
 - `pause`：暂停，适合情感沉淀

@@ -85,6 +85,14 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     // 使用统一的 AI 客户端调用
     const aiContent = await callAIText(finalPrompt, { maxTokens: 2000, story });
 
+    // 检查 AI 返回内容是否为空
+    if (!aiContent || aiContent.trim().length === 0) {
+      // 清理已创建的分支记录
+      const existingBranches = await branchesStore.load();
+      await branchesStore.save(existingBranches.filter(b => b.id !== branchId));
+      return NextResponse.json({ error: 'AI 未生成有效内容，分叉失败，请重试' }, { status: 500 });
+    }
+
     // Create new segment on the new branch
     const newSegment: StorySegment = {
       id: `seg_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,

@@ -18,11 +18,12 @@ import { lorebook } from './lorebook';
 import { enrichPromptWithFacts } from './knowledge-cache';
 import { directorManager } from './director-manager';
 import { PacingEngine } from './pacing-engine';
-import { contextSummarizer, estimateTokens } from './context-summarizer';
+import { contextSummarizer, estimateTokens, callAI } from './context-summarizer';
 import { EventTracker, buildEventPrompt } from './event-tracker';
 import { branchMemory } from './branch-memory';
 import type { PacingConfig, DirectorState, StorySegment } from '@/types/story';
 import { storiesStore, getOrderedChain } from './simple-db';
+import { summariesStore } from './simple-db';
 
 export interface BuildPromptOptions {
   storyId: string;
@@ -75,17 +76,116 @@ function allocateTokenBudget(totalBudget: number) {
 }
 
 /**
- * 5.5 构建"记忆提醒"指令
+ * 3.2 从前文段落中提取关键实体（人名、地名、器物名）
+ */
+async function extractKeyEntitiesFromRecentContext(chain: StorySegment[], maxTokens: number = 1500): Promise<string[]> {
+  if (chain.length === 0) return [];
+
+  // 提取最近 2 个段落的完整文本
+  const recentSegments = chain.slice(-2);
+  const recentText = recentSegments.map(s => s.content).join('\n\n');
+  
+  // 使用正则表达式匹配专有名词模式
+  const patterns = [
+    // 中文人名：2-4字，常见姓氏开头
+    /(?<=[^a-zA-Z0-9\u4e00-\u9fff])[李王张刘陈杨赵黄周吴徐孙朱马胡郭林何高梁郑罗宋谢唐韩曹许邓萧冯曾程彭潘袁于董余苏叶吕魏蒋田杜丁沈姜范江傅钟卢汪戴崔任陆廖姚方金邱夏谭韦贾邹石熊孟秦阎薛侯雷白龙段郝孔邵史毛常万顾赖武康贺严尹钱施牛洪龚][^a-zA-Z0-9\u4e00-\u9fff]{1,3}(?=，|。|！|？|是|说|去|来|到|在|把|被|将|和|与|或|但|而|却|且|若|如|像|似|若|如)[^a-zA-Z0-9\u4e00-\u9fff]*/g,
+    // 地名：常见地名模式
+    /(?<=[^a-zA-Z0-9\u4e00-\u9fff])(北京|上海|广州|深圳|南京|杭州|成都|重庆|武汉|西安|天津|苏州|青岛|大连|厦门|宁波|无锡|济南|长沙|哈尔滨|沈阳|长春|石家庄|太原|呼和浩特|银川|西宁|乌鲁木齐|拉萨|昆明|贵阳|南宁|海口|三亚|福州|南昌|合肥|郑州|兰州|银川|贵阳|昆明|南宁|哈尔滨|长春|沈阳|石家庄|太原|呼和浩特|银川|西宁|乌鲁木齐|拉萨)(?=[，。！？])/g,
+    // 地名：朝代/国家/地区
+    /(?<=[^a-zA-Z0-9\u4e00-\u9fff])(秦|汉|唐|宋|元|明|清|周|春秋|战国|魏|蜀|吴|晋|南北朝|隋|五代|十国|辽|金|西夏|蒙古|民国|新中国|汉朝|唐朝|宋朝|明朝|清朝)(?=[，。！？])/g,
+    // 器物名：具体物品
+    /(?<=[^a-zA-Z0-9\u4e00-\u9fff])(剑|刀|枪|弓|箭|盾|甲|马|车|船|旗|印|玺|玉|金|银|铜|铁|酒|茶|药|书|画|琴|棋|笛|箫|鼓|钟|鼎|炉|镜|扇|珠|宝|冠|袍|带|靴|帽|饰|佩|器|物|宝|剑|刀|枪|弓|箭|盾|甲|马|车|船|旗|印|玺|玉|金|银|铜|铁)(?=[，。！？])/g,
+  ];
+
+  const entities = new Set<string>();
+  
+  // 使用正则提取
+  for (const pattern of patterns) {
+    const matches = recentText.match(pattern);
+    if (matches) {
+      matches.forEach(match => {
+        // 清理匹配结果
+        const clean = match.trim();
+        if (clean.length >= 2 && clean.length <= 6) {
+          entities.add(clean);
+        }
+      });
+    }
+  }
+
+  // 使用 AI 进行精确提取（如果文本较长）
+  if (recentText.length > 500) {
+    try {
+      const aiPrompt = `请从以下文本中提取所有专有名词，包括：
+1. 人名（2-4字）
+2. 地名（城市、国家、地区、朝代）
+3. 器物名（具体物品、武器、用品）
+
+文本内容：
+${recentText}
+
+请只输出列表，每行一个实体，不要其他解释：`;
+
+      const aiResponse = await callAI(aiPrompt, 300);
+      const aiEntities = aiResponse.split('\n')
+        .map(line => line.trim())
+        .filter(line => line.length >= 2 && line.length <= 6);
+      
+      aiEntities.forEach(entity => entities.add(entity));
+    } catch (error) {
+      console.warn('AI 实体提取失败，使用正则结果:', error);
+    }
+  }
+
+  // 转换为数组并去重
+  return Array.from(entities).slice(0, 20); // 限制最多20个实体
+}
+
+/**
+ * 3.2 构建"已有世界观元素"清单
+ */
+function buildWorldElementsList(entities: string[]): string {
+  if (entities.length === 0) return '';
+
+  const lines: string[] = [];
+  lines.push('## 已有世界观元素清单');
+  
+  // 按类型分组
+  const persons = entities.filter(e => /[李王张刘陈杨赵黄周吴徐孙朱马胡郭林何高梁郑罗宋谢唐韩曹许邓萧冯曾程彭潘袁于董余苏叶吕魏蒋田杜丁沈姜范江傅钟卢汪戴崔任陆廖姚方金邱夏谭韦贾邹石熊孟秦阎薛侯雷白龙段郝孔邵史毛常万顾赖武康贺严尹钱施牛洪龚]/.test(e));
+  const places = entities.filter(e => /(北京|上海|广州|深圳|南京|杭州|成都|重庆|武汉|西安|天津|苏州|青岛|大连|厦门|宁波|无锡|济南|长沙|哈尔滨|沈阳|长春|石家庄|太原|呼和浩特|银川|西宁|乌鲁木齐|拉萨|昆明|贵阳|南宁|海口|三亚|福州|南昌|合肥|郑州|兰州|银川|贵阳|昆明|南宁|哈尔滨|长春|沈阳|石家庄|太原|呼和浩特|银川|西宁|乌鲁木齐|拉萨|秦|汉|唐|宋|元|明|清|周|春秋|战国|魏|蜀|吴|晋|南北朝|隋|五代|十国|辽|金|西夏|蒙古|民国|新中国|汉朝|唐朝|宋朝|明朝|清朝)/.test(e));
+  const items = entities.filter(e => /(剑|刀|枪|弓|箭|盾|甲|马|车|船|旗|印|玺|玉|金|银|铜|铁|酒|茶|药|书|画|琴|棋|笛|箫|鼓|钟|鼎|炉|镜|扇|珠|宝|冠|袍|带|靴|帽|饰|佩|器|物|宝|剑|刀|枪|弓|箭|盾|甲|马|车|船|旗|印|玺|玉|金|银|铜|铁)/.test(e));
+
+  if (persons.length > 0) {
+    lines.push(`**人物**：${persons.join('、')}`);
+  }
+  if (places.length > 0) {
+    lines.push(`**地点**：${places.join('、')}`);
+  }
+  if (items.length > 0) {
+    lines.push(`**器物**：${items.join('、')}`);
+  }
+
+  return lines.join('\n');
+}
+
+/**
+ * 5.5 构建"记忆提醒"指令 (Cluster 3.1, 3.3, 3.4)
  */
 function buildMemoryReminderPrompt(
   activeEventCount: number,
   hasBranchMemory: boolean,
   characterCount: number,
+  foreshadowingList: string[],
+  forbiddenItems: string[],
 ): string {
   const lines: string[] = [];
   lines.push('## 写作注意事项');
 
   const reminders: string[] = [];
+  
+  // 3.1 硬约束指令：必须引用前文具体细节
+  reminders.push('【硬约束】必须引用前文中已出现的具体细节（人名、地点、事件），不得凭空创造前文中未提及的新角色或新地点');
+  
   if (activeEventCount > 0) {
     reminders.push(`当前有 ${activeEventCount} 条活跃事件线，续写时请注意推进或回应这些情节`);
   }
@@ -94,6 +194,16 @@ function buildMemoryReminderPrompt(
   }
   reminders.push(`当前涉及 ${characterCount} 个角色，请保持角色性格、关系和状态的连贯性`);
   reminders.push('续写内容不得与已建立的剧情事实产生矛盾');
+  
+  // 3.3 未闭合情节线提醒
+  if (foreshadowingList.length > 0) {
+    reminders.push(`以下情节线尚未完结，请在续写中合理推进或回应：${foreshadowingList.join('；')}`);
+  }
+  
+  // 3.4 禁止事项清单
+  if (forbiddenItems.length > 0) {
+    reminders.push('【禁止事项】' + forbiddenItems.join('；'));
+  }
 
   lines.push(...reminders.map(r => `- ${r}`));
   return lines.join('\n');
@@ -226,6 +336,18 @@ const eventTracker = new EventTracker();
     parts.push(`## 当前故事进展\n${contextText}`);
   }
 
+  // ─── 6.5 前文关键实体清单 (3.2) ───
+  let worldElementsText = '';
+  try {
+    const keyEntities = await extractKeyEntitiesFromRecentContext(chain, 500);
+    worldElementsText = buildWorldElementsList(keyEntities);
+    if (worldElementsText.trim()) {
+      parts.push(worldElementsText);
+    }
+  } catch {
+    // Entity extraction failed, skip gracefully
+  }
+
   // ─── 7. 世界观 — 时间轴 + Lorebook (dynamic budget) ───
   // 同人/玄幻等架空作品不注入历史 Lorebook，避免世界观冲突
   try {
@@ -280,8 +402,62 @@ const eventTracker = new EventTracker();
     parts.push(pacingEngine.buildPacingInstruction());
   }
 
-  // ─── 10. 记忆提醒 (5.5) (fixed) ───
-  parts.push(buildMemoryReminderPrompt(activeEventsCount, hasBranchMemory, allCharIds.length));
+  // ─── 9.5 收集 foreshadowing 和构建禁止事项清单 (3.3, 3.4) ───
+  let foreshadowingList: string[] = [];
+  let forbiddenItems: string[] = [
+    '不得出现与前文矛盾的时间/季节/天气描写',
+    '不得让已死亡角色重新活跃', 
+    '不得改变已建立的角色性格'
+  ];
+
+  try {
+    // 从摘要中提取 foreshadowing 信息
+    const all = await summariesStore.load();
+    const recentSummaries = all
+      .filter((s: any) => s.storyId === storyId && s.branchId === branchId)
+      .slice(-5); // 取最近5个摘要
+    
+    for (const summary of recentSummaries) {
+      if (summary.foreshadowing && Array.isArray(summary.foreshadowing)) {
+        foreshadowingList.push(...summary.foreshadowing);
+      }
+      if (summary.keyEvents && Array.isArray(summary.keyEvents)) {
+        // 将关键事件也作为未闭合情节线
+        foreshadowingList.push(...summary.keyEvents.filter((e: string) => e.includes('未') || e.includes('将') || e.includes('计划')));
+      }
+    }
+    foreshadowingList = [...new Set(foreshadowingList)].slice(0, 10); // 去重并限制数量
+  } catch {
+    // Fallback: 使用简单的关键词检测
+    if (chain.length > 0) {
+      const recentText = chain.slice(-2).map(s => s.content).join(' ');
+      const foreshadowingPatterns = [
+        /将[^。]*?[^。]*?[。！？]/g,
+        /计划[^。]*?[^。]*?[。！？]/g,
+        /准备[^。]*?[^。]*?[。！？]/g,
+        /打算[^。]*?[^。]*?[。！？]/g,
+        /将要[^。]*?[^。]*?[。！？]/g,
+      ];
+      
+      for (const pattern of foreshadowingPatterns) {
+        const matches = recentText.match(pattern);
+        if (matches) {
+          foreshadowingList.push(...matches.slice(0, 3));
+        }
+      }
+      foreshadowingList = [...new Set(foreshadowingList)].slice(0, 5);
+    }
+  }
+
+  // 根据故事类型添加额外的禁止事项
+  if (!isFiction) {
+    forbiddenItems.push('不得与现代事物混淆', '不得与正史记载矛盾');
+  } else {
+    forbiddenItems.push('不得与原著设定矛盾');
+  }
+
+  // ─── 10. 记忆提醒 (5.5 + Cluster 3.1, 3.3, 3.4) ───
+  parts.push(buildMemoryReminderPrompt(activeEventsCount, hasBranchMemory, allCharIds.length, foreshadowingList, forbiddenItems));
 
   // ─── 11. 续写指令 (fixed) ───
   const wordHint = pacingConfig

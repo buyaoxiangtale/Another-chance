@@ -60,6 +60,8 @@ export async function getWikiArticle(title: string, lang: string = 'zh'): Promis
     url.searchParams.set('prop', 'extracts');
     url.searchParams.set('explaintext', '1');
     url.searchParams.set('exintro', '0');
+    url.searchParams.set('exsectionformat', 'plain');
+    url.searchParams.set('exchars', '500'); // 4.1 增加摘要长度：从默认200-300字增加到500字
     url.searchParams.set('format', 'json');
 
     const res = await fetch(url.toString(), { headers: { 'User-Agent': 'ChronosMirror/1.0' } });
@@ -97,6 +99,12 @@ export function extractHistoricalEntities(text: string): Array<{ name: string; t
   ];
   // 人名模式：2-4个汉字 + 常见后缀
   const personRegex = /([\u4e00-\u9fff]{2,4})(?:帝|王|皇|后|妃|将军|丞相|大夫|公|侯|伯|子|卿|相|将|帅|僧|道|师|祖|宗|帝)/g;
+
+  // 4.2 N-gram 中文人名识别模式：2-3字中文 + 上下文模式匹配
+  const ngramPersonRegex = /(?:[\u4e00-\u9fff]{2,3})(?:[\u4e00-\u9fff]?)(?=[^\u4e00-\u9fff]|，|。|！|？|$)/g;
+  
+  // N-gram 地名识别模式：常见地名特征词组合
+  const ngramPlaceRegex = /(?:[\u4e00-\u9fff]{2,4})(?:[\u4e00-\u9fff]{1,2})(?:城|都|府|州|郡|关|山|水|河|湖|海|岭|原|野|漠|林|岛|镇|村|寨|堡|邑|郭|邑|洲|岛|礁|滩|湾|港|口|峡|谷|坪|原|野|漠|林|海|洋|湖|泊|河|江|渭|淮|济|沅|湘|资|澧|赣|闽|浙|苏|皖|赣|鄂|湘|川|渝|贵|云|藏|青|甘|宁|陕|晋|冀|鲁|豫|鄂|湘|赣|闽|浙|苏|皖|赣|鄂|湘|川|渝|贵|云|藏|青|甘|宁|陕|晋|冀|鲁|豫)(?=[^\u4e00-\u9fff]|，|。|！|？|$)/g;
 
   // 地名模式
   const placeKeywords = [
@@ -140,6 +148,27 @@ export function extractHistoricalEntities(text: string): Array<{ name: string; t
   while ((m = personRegex.exec(text)) !== null) {
     const name = m[1] + m[2];
     if (!seen.has(name)) { seen.add(name); entities.push({ name, type: 'person' }); }
+  }
+
+  // 4.2 使用 N-gram 模式提取人名
+  while ((m = ngramPersonRegex.exec(text)) !== null) {
+    const name = m[0].trim();
+    // 过滤掉太短或太长的名字，且需要是纯汉字
+    if (name.length >= 2 && name.length <= 4 && /^[\u4e00-\u9fff]+$/.test(name)) {
+      // 检查上下文，确保是一个独立的人名
+      const context = text.substring(Math.max(0, m.index - 20), Math.min(text.length, m.index + name.length + 20));
+      if (context.includes('说') || context.includes('叫') || context.includes('是') || context.includes('人名') || context.includes('人物')) {
+        if (!seen.has(name)) { seen.add(name); entities.push({ name, type: 'person' }); }
+      }
+    }
+  }
+
+  // 4.2 使用 N-gram 模式提取地名
+  while ((m = ngramPlaceRegex.exec(text)) !== null) {
+    const name = m[0].trim();
+    if (name.length >= 2 && name.length <= 6) {
+      if (!seen.has(name)) { seen.add(name); entities.push({ name, type: 'place' }); }
+    }
   }
 
   // 提取地名
@@ -251,6 +280,24 @@ export async function factCheckEntities(
         let searchResults = await searchWikipedia(query);
         searchResults = filterResults(searchResults, preferHistory);
 
+        // 4.3 当中文搜索结果不足时，自动用英文维基百科补充查询
+        if (searchResults.length === 0 || (searchResults.length === 1 && searchResults[0].snippet.length < 50)) {
+          const englishQuery = buildSearchQuery(entity, era, { ...ctx, genre: ctx?.genre ? 'en' : ctx?.genre });
+          const englishResults = await searchWikipedia(englishQuery, 'en');
+          if (englishResults.length > 0) {
+            const article = await getWikiArticle(englishResults[0].title, 'en');
+            const extract = article?.extract || englishResults[0].snippet;
+            const summary = extract.length > 300 ? extract.slice(0, 300) + '...' : extract;
+
+            return {
+              ...entity,
+              summary,
+              url: article?.url || englishResults[0].url,
+              confidence: 0.6, // 英文结果置信度略低
+            };
+          }
+        }
+
         if (searchResults.length === 0) {
           return { ...entity, summary: '', url: undefined, confidence: 0 };
         }
@@ -258,8 +305,8 @@ export async function factCheckEntities(
         // 取第一个过滤后的结果
         const article = await getWikiArticle(searchResults[0].title);
         const extract = article?.extract || searchResults[0].snippet;
-        // 截取前300字作为摘要
-        const summary = extract.length > 300 ? extract.slice(0, 300) + '...' : extract;
+        // 截取前500字作为摘要（4.1 已增加到500字）
+        const summary = extract.length > 500 ? extract.slice(0, 500) + '...' : extract;
 
         return {
           ...entity,

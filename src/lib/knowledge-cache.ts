@@ -19,7 +19,7 @@ interface KnowledgeCache {
   entries: CacheEntry[];
 }
 
-const DEFAULT_TTL = 24 * 60 * 60 * 1000; // 24小时
+const DEFAULT_TTL = 7 * 24 * 60 * 60 * 1000; // 7天（历史事实不变）
 
 async function loadCache(): Promise<KnowledgeCache> {
   try {
@@ -76,6 +76,51 @@ export async function setCache(query: string, type: 'search' | 'article' | 'fact
 }
 
 /**
+ * 4.5 计算实体与上下文的相关度分数
+ */
+function calculateRelevanceScore(entityName: string, context: string): number {
+  if (!context || context.length < 10) return 0;
+
+  const contextLower = context.toLowerCase();
+  const entityLower = entityName.toLowerCase();
+  
+  // 1. 实体名直接出现在上下文中
+  if (contextLower.includes(entityLower)) {
+    return 1.0;
+  }
+  
+  // 2. 实体名的部分关键词出现在上下文中
+  const keywords = entityName.split(/[，。、！？\s]/).filter(k => k.length >= 2);
+  let matchedKeywords = 0;
+  for (const keyword of keywords) {
+    if (keyword.length >= 2 && contextLower.includes(keyword.toLowerCase())) {
+      matchedKeywords++;
+    }
+  }
+  if (matchedKeywords > 0) {
+    return Math.min(0.8, matchedKeywords / keywords.length * 0.8);
+  }
+  
+  // 3. 同义词或相关概念（简单启发式）
+  const synonymPatterns = [
+    ['皇帝', '君主', '帝王', '皇上'],
+    ['将军', '元帅', '统帅', '将领'],
+    ['丞相', '宰相', '相国', '太尉'],
+    ['都城', '首都', '京城', '国都'],
+    ['战争', '战役', '战斗', '冲突'],
+    ['朝代', '王朝', '政权', '时期'],
+  ];
+  
+  for (const synonymGroup of synonymPatterns) {
+    if (synonymGroup.includes(entityName) && synonymGroup.some(k => contextLower.includes(k.toLowerCase()))) {
+      return 0.6;
+    }
+  }
+  
+  return 0;
+}
+
+/**
  * 4.7 enrichPromptWithFacts — 在 AI prompt 中注入事实锚点
  */
 export async function enrichPromptWithFacts(
@@ -88,7 +133,17 @@ export async function enrichPromptWithFacts(
   const preferHistory = shouldPreferHistory(ctx);
   const factLines: string[] = [];
 
-  for (const entity of entities) {
+  // 4.5 从 prompt 中提取上下文（排除事实锚点部分）
+  const contextPrompt = prompt.replace(/---[\s\S]*?参考结束---[\s\S]*?/, '').trim();
+  
+  // 4.5 过滤出与当前上下文相关的实体
+  const relevantEntities = entities.filter(entity => {
+    const relevanceScore = calculateRelevanceScore(entity.name, contextPrompt);
+    return relevanceScore > 0.3; // 相关度阈值
+  });
+
+  // 只为相关实体查询事实
+  for (const entity of relevantEntities) {
     // 先查缓存
     const cacheKey = `${preferHistory ? 'history' : 'fiction'}:${entity.name}`;
     const cached = await getCached(cacheKey, 'factcheck');

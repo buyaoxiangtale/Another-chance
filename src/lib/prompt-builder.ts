@@ -348,7 +348,30 @@ const eventTracker = new EventTracker();
     // Entity extraction failed, skip gracefully
   }
 
-  // ─── 7. 世界观 — 时间轴 + Lorebook (dynamic budget) ───
+  // ─── 7. 事实锚点注入 (4.6) — 在前文上下文之后，世界观之前 ───
+  try {
+    const entities: Array<{ name: string; type: string }> = [];
+    if (story && (story as any).characterIds) {
+      for (const cid of (story as any).characterIds) {
+        const c = await characterManager.getById(cid);
+        if (c) entities.push({ name: c.name, type: 'person' });
+      }
+    }
+    
+    if (entities.length > 0) {
+      const facts = await enrichPromptWithFacts('', entities, { genre: effectiveGenre, era: (story as any)?.era });
+      if (facts && facts.includes('--- 历史事实参考 ---')) {
+        const factBlock = facts.split('--- 历史事实参考 ---')[1].split('--- 参考结束 ---')[0];
+        if (factBlock.trim()) {
+          parts.push(`## 历史事实参考\n${factBlock.trim()}`);
+        }
+      }
+    }
+  } catch {
+    // Facts enrichment failed, skip gracefully
+  }
+
+  // ─── 8. 世界观 — 时间轴 + Lorebook (dynamic budget) ───
   // 同人/玄幻等架空作品不注入历史 Lorebook，避免世界观冲突
   try {
     const timeline = await timelineEngine.getTimeline(storyId, branchId);
@@ -468,17 +491,7 @@ const eventTracker = new EventTracker();
     : '，保持古典文学风格';
   parts.push(`${wordHint}${styleHint}，与前文情节连续。`);
 
-  // ─── Assemble & enrich with facts ───
+  // ─── Assemble prompt ───
   const fullPrompt = parts.join('\n\n');
-
-  const entities: Array<{ name: string; type: string }> = [];
-  if (story && (story as any).characterIds) {
-    for (const cid of (story as any).characterIds) {
-      const c = await characterManager.getById(cid);
-      if (c) entities.push({ name: c.name, type: 'person' });
-    }
-  }
-
-  const enriched = await enrichPromptWithFacts(fullPrompt, entities, { genre: effectiveGenre, era: (story as any)?.era });
-  return enriched;
+  return fullPrompt;
 }

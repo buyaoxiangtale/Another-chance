@@ -2,48 +2,49 @@
 
 > 基于历史/经典故事的关键片段和人物产生分叉剧情的故事续写平台
 
-## 📖 项目简介
+## 项目简介
 
-古事是一个创新的故事续写平台，用户可以选择历史故事的关键转折点（如"秦始皇被成功刺杀"），系统将生成连续的分叉故事线。平台采用纯文本版本先行，后续将支持 AI 生成图片。
+古事是一个创新的故事续写平台，用户可以选择历史故事的关键转折点（如"秦始皇被成功刺杀"），系统将生成连续的分叉故事线。平台支持 AI 续写、角色建模、时间轴校验、导演模式等功能。
 
-### 🎯 核心功能
+### 核心功能
 
 - **故事树状展示** - 以树状结构展示故事发展脉络
 - **多路线分叉** - 在关键节点提供不同的故事走向选择
-- **AI 续写** - 基于历史背景智能生成故事内容
-- **流式阅读** - 支持打字机效果的故事展示
-- **响应式设计** - 适配桌面和移动设备
+- **AI 续写** - 基于历史背景智能生成故事内容（支持流式输出）
+- **角色系统** - 创建角色并自动融入续写上下文
+- **时间轴引擎** - 校验叙事时间单调性，自动检测时间倒流
+- **导演模式** - 手动控制角色状态、世界变量和叙事约束
+- **MCP 维基百科** - 续写时自动检索历史实体，注入事实锚点
+- **节奏控制** - 选择叙事节奏（rush/detailed/pause/summary）
 
-## 🛠️ 技术栈
+## 技术栈
 
 ### 前端
-- **Next.js 14** (App Router)
+- **Next.js 13** (App Router)
 - **TypeScript**
 - **TailwindCSS**
-- **React**
+- **React 18**
 
 ### 后端
 - **Next.js API Routes**
-- **Prisma ORM**
-- **SQLite** (开发) / PostgreSQL (生产)
+- **JSON 文件存储** (`src/lib/simple-db.ts`) — 数据存放在 `data/` 目录
+- **Prisma** — Schema 定义预留，当前运行时未使用
 
 ### AI 集成
 - **OpenAI-compatible API** 支持
-- 可配置的 AI 文本生成
-- 图片生成预留接口
+- 文本续写与图片生成
 
 ### 部署
 - **Docker** 容器化部署
-- **Docker Compose** 编排
-- **Nginx** 反向代理 (可选)
+- **Docker Compose** 编排（含 Redis、Nginx）
+- **Capacitor** 移动端支持（iOS/Android）
 
-## 🚀 快速开始
+## 快速开始
 
 ### 环境要求
 
-- Node.js 18+ 
+- Node.js 18+
 - npm 或 yarn
-- Git
 
 ### 安装步骤
 
@@ -60,23 +61,16 @@ npm install
 
 3. **环境配置**
 ```bash
-# 复制环境变量模板
 cp .env.example .env.local
-
-# 编辑环境变量
-nano .env.local
+# 编辑 .env.local，填入 AI_API_KEY 和 AI_BASE_URL
 ```
 
-4. **数据库初始化**
+4. **初始化数据**
 ```bash
-# 生成 Prisma 客户端
-npx prisma generate
-
-# 运行数据库迁移（如果使用 Prisma Migrate）
-npx prisma migrate dev --name init
-
-# 或者使用种子数据填充数据库
-npm run db:seed
+mkdir -p data
+node seed.js          # 基础种子数据（3个故事）
+# 或使用更丰富的数据：
+# node prisma/seed.ts  # 含角色、时间轴、设定集的完整数据
 ```
 
 5. **启动开发服务器**
@@ -85,61 +79,77 @@ npm run dev
 ```
 
 6. **访问应用**
+
 打开浏览器访问 [http://localhost:3000](http://localhost:3000)
 
-### 使用 Docker 部署
-
-#### 开发环境
-```bash
-# 构建并启动开发环境
-docker-compose -f docker-compose.yml up gushi-dev
-
-# 或单独启动开发服务
-docker-compose up gushi-dev
-```
-
-#### 生产环境
-```bash
-# 构建并启动生产环境
-docker-compose up -d gushi-app
-
-# 查看日志
-docker-compose logs -f gushi-app
-```
-
-## 📁 项目结构
+## 项目结构
 
 ```
 gushi/
 ├── src/
-│   ├── app/                 # Next.js App Router
-│   │   ├── api/            # API 路由
-│   │   ├── components/     # React 组件
-│   │   ├── lib/            # 工具函数
-│   │   └── types/          # TypeScript 类型定义
-│   ├── prisma/             # 数据库模式和迁移
-│   └── public/             # 静态资源
-├── data/                   # 数据存储（JSON 文件）
-├── docker-compose.yml      # Docker 编排配置
-├── Dockerfile             # 生产环境构建
-├── Dockerfile.dev         # 开发环境构建
-└── README.md              # 项目说明
+│   ├── app/                    # Next.js App Router 页面与 API 路由
+│   │   ├── api/                # API 路由（17个端点）
+│   │   ├── create/             # 创建故事页
+│   │   └── story/[id]/         # 故事详情页
+│   ├── components/             # React 组件
+│   │   ├── CharacterPanel.tsx
+│   │   ├── DirectorSidebar.tsx
+│   │   ├── PacingControls.tsx
+│   │   ├── StreamingText.tsx
+│   │   ├── TimelineBar.tsx
+│   │   └── story/
+│   ├── lib/                    # 核心业务逻辑
+│   │   ├── simple-db.ts        # JSON 文件存储引擎
+│   │   ├── ai-client.ts        # AI API 客户端
+│   │   ├── prompt-builder.ts   # Prompt 构建
+│   │   ├── character-engine.ts # 角色系统
+│   │   ├── timeline-engine.ts  # 时间轴引擎
+│   │   ├── director-manager.ts # 导演模式
+│   │   ├── pacing-engine.ts    # 节奏控制
+│   │   ├── mcp-wikipedia.ts    # 维基百科集成
+│   │   └── ...
+│   └── types/                  # TypeScript 类型定义
+├── data/                       # JSON 数据文件（运行时数据库）
+├── prisma/                     # Prisma Schema（预留）
+├── scripts/                    # 工具脚本
+│   ├── migrate-data.js         # 数据迁移
+│   └── migrate-chronosmirror.js
+├── tests/                      # 测试文件（Vitest）
+├── Docs/                       # 文档
+├── docker-compose.yml
+├── Dockerfile
+└── Dockerfile.dev
 ```
 
-## 🗄️ 数据库
+## 数据存储
+
+项目使用 JSON 文件存储数据（`src/lib/simple-db.ts`），数据文件位于 `data/` 目录：
+
+| 文件 | 说明 |
+|------|------|
+| `stories.json` | 故事列表 |
+| `segments.json` | 故事段落 |
+| `branches.json` | 分叉节点 |
+| `characters.json` | 角色数据 |
+| `historical-references.json` | 历史引用 |
+| `director-states.json` | 导演模式状态 |
+| `lorebook.json` | 设定集 |
+| `knowledge-cache.json` | 知识缓存 |
 
 ### 数据模型
 
-#### Story (故事主线)
+#### Story (故事)
 ```typescript
 interface Story {
   id: string;
   title: string;
   description?: string;
   author?: string;
+  era?: string;
+  genre?: string;
+  rootSegmentId?: string;
   createdAt: string;
   updatedAt: string;
-  rootSegmentId?: string;
 }
 ```
 
@@ -151,21 +161,15 @@ interface StorySegment {
   content: string;
   order: number;
   isBranchPoint: boolean;
-  createdAt: string;
-  updatedAt: string;
   storyId: string;
   parentBranchId?: string;
   imageUrls: string[];
-  imageMetadata?: Array<{
-    id: string;
-    url: string;
-    description?: string;
-    type: 'illustration' | 'scene' | 'character' | 'object';
-    width?: number;
-    height?: number;
-    alt?: string;
-  }>;
-  hasImages: boolean;
+  timeline?: string;
+  characterIds: string[];
+  narrativePace?: 'rush' | 'detailed' | 'pause' | 'summary';
+  mood?: string;
+  createdAt: string;
+  updatedAt: string;
 }
 ```
 
@@ -182,111 +186,43 @@ interface StoryBranch {
 }
 ```
 
-### 数据迁移
-
-```bash
-# 创建新的迁移
-npx prisma migrate dev --name migration-name
-
-# 应用迁移
-npx prisma migrate deploy
-
-# 重置数据库（开发环境）
-npx prisma migrate reset --force
-
-# 查看数据库状态
-npx prisma studio
-```
-
-## 🤖 AI 集成
+## AI 集成
 
 ### 环境变量配置
 
-在 `.env.local` 中配置 AI API 相关变量：
+在 `.env.local` 中配置：
 
 ```env
-AI_API_KEY=your_openai_api_key
+AI_API_KEY=your_api_key
 AI_BASE_URL=https://api.openai.com/v1
 AI_MODEL=gpt-3.5-turbo
 ```
 
-### 支持的 AI 服务
+支持任何 OpenAI 兼容的 API 服务（如 DeepSeek、通义千问等），修改 `AI_BASE_URL` 即可。
 
-- **OpenAI GPT** (默认)
-- **兼容 OpenAI 的 API 服务**
-- **自定义 API 端点**
+## API 端点
 
-### 图片生成预留
+| 端点 | 方法 | 说明 |
+|------|------|------|
+| `/api/stories` | GET/POST | 故事列表 / 创建故事 |
+| `/api/stories/[id]` | GET/DELETE | 获取 / 删除故事 |
+| `/api/stories/[id]/segments` | GET | 获取段落列表 |
+| `/api/stories/[id]/tree` | GET | 获取故事树结构 |
+| `/api/stories/[id]/branch` | POST | 创建分叉 |
+| `/api/stories/[id]/continue` | POST | AI 续写 |
+| `/api/stories/[id]/stream-continue` | POST | 流式 AI 续写 |
+| `/api/stories/[id]/characters` | GET/POST | 角色管理 |
+| `/api/characters/[id]` | GET/PATCH/DELETE | 单角色操作 |
+| `/api/stories/[id]/timeline` | GET/POST | 时间轴操作 |
+| `/api/stories/[id]/director` | GET/PATCH | 导演模式 |
+| `/api/lorebook` | GET/POST | 设定集 |
+| `/api/fandom-lorebook` | GET | Fandom 设定集 |
+| `/api/knowledge/search` | GET | 历史知识搜索 |
+| `/api/knowledge/factcheck` | POST | 事实核查 |
+| `/api/images` | GET | 图片列表 |
+| `/api/images/generate` | POST | 生成图片 |
 
-平台预留了图片生成功能，支持：
-
-- 多种图片尺寸（256x256 到 1792x1024）
-- 图片质量设置（标准/高清）
-- 多种艺术风格
-
-## 📱 使用指南
-
-### 阅读故事
-
-1. 在首页选择一个历史故事
-2. 按时间顺序阅读故事段落
-3. 在分叉点选择不同的故事走向
-
-### 创建分叉
-
-1. 点击故事中的分叉点
-2. 选择分叉方向（alternate/different/extended）
-3. 系统自动生成新的故事分支
-
-### 故事续写
-
-1. 选择要续写的段落
-2. 设置续写风格和人物
-3. AI 自动生成后续内容
-
-## 🚀 部署指南
-
-### 生产环境部署
-
-1. **构建应用**
-```bash
-npm run build
-```
-
-2. **使用 Docker 部署**
-```bash
-docker-compose up -d
-```
-
-3. **配置 Nginx（可选）**
-```nginx
-server {
-    listen 80;
-    server_name your-domain.com;
-    
-    location / {
-        proxy_pass http://localhost:3000;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection 'upgrade';
-        proxy_set_header Host $host;
-        proxy_cache_bypass $http_upgrade;
-    }
-}
-```
-
-### 环境变量
-
-生产环境需要设置以下变量：
-
-```env
-NODE_ENV=production
-DATABASE_URL=file:./production.db
-AI_API_KEY=your_production_api_key
-AI_BASE_URL=https://api.openai.com/v1
-```
-
-## 📊 开发脚本
+## 开发脚本
 
 ```bash
 # 开发服务器
@@ -300,77 +236,42 @@ npm start
 
 # 代码检查
 npm run lint
-
-# 类型检查
-npm run type-check
-
-# 数据库相关
-npm run db:generate    # 生成 Prisma 客户端
-npm run db:seed      # 填充种子数据
-npm run db:studio    # 打开 Prisma Studio
 ```
 
-## 🤝 贡献指南
+### 移动端（Capacitor）
 
-1. Fork 项目
-2. 创建功能分支 (`git checkout -b feature/amazing-feature`)
-3. 提交更改 (`git commit -m 'Add amazing feature'`)
-4. 推送到分支 (`git push origin feature/amazing-feature`)
-5. 打开 Pull Request
+```bash
+npm run mobile:setup       # 初始化 Capacitor
+npm run mobile:build       # 构建移动端
+npm run mobile:run         # 运行移动端
+```
 
-### 开发规范
+## Docker 部署
 
-- 使用 TypeScript 编写类型安全的代码
-- 遵循 ESLint 和 Prettier 规范
-- 编写清晰的 commit 消息
-- 为新功能编写测试
+### 开发环境
+```bash
+docker-compose up gushi-dev
+```
 
-## 📄 许可证
+### 生产环境
+```bash
+docker-compose up -d gushi-app
+docker-compose logs -f gushi-app
+```
 
-本项目采用 MIT 许可证 - 查看 [LICENSE](LICENSE) 文件了解详情
+## 使用指南
 
-## 🙏 致谢
+### 阅读故事
+1. 在首页选择一个历史故事
+2. 按时间顺序阅读故事段落
+3. 在分叉点选择不同的故事走向
 
-- [Next.js](https://nextjs.org/) - React 框架
-- [Prisma](https://prisma.io/) - 数据库 ORM
-- [TailwindCSS](https://tailwindcss.com/) - CSS 框架
-- [OpenAI](https://openai.com/) - AI 服务提供商
+### 创建分叉
+1. 点击故事中的分叉点
+2. 选择分叉方向（alternate/different/extended）
+3. 系统自动生成新的故事分支
 
-## 📞 联系我们
-
-- 项目主页: [GitHub Repository]
-- 问题反馈: [Issues]
-- 开发者邮箱: your-email@example.com
-
----
-
-## 🚀 ChronosMirror 时空镜像 — 新功能
-
-ChronosMirror 在古事基础上新增了角色深度建模、时间轴校验、MCP 维基百科事实锚定、导演模式和节奏控制。
-
-### 新功能一览
-
-| 功能 | 说明 |
-|------|------|
-| 🎭 角色系统 | 创建角色（姓名、朝代、性格、口癖、关系），AI 续写自动融入角色上下文 |
-| 📅 时间轴引擎 | 校验叙事时间单调性，自动检测时间倒流并发出警告 |
-| 📚 MCP 维基百科 | 续写时自动检索历史实体，将事实锚点注入 prompt，提升历史细节准确性 |
-| 🎬 导演模式 | 手动修改角色状态、世界变量、约束条件，精确控制叙事走向 |
-| 🎵 节奏控制 | 选择叙事节奏（detailed/moderate/fast），实时控制续写长度和情绪 |
-
-### 新增 API 端点
-
-| 端点 | 方法 | 说明 |
-|------|------|------|
-| `/api/stories/[id]/characters` | GET/POST | 获取/创建角色 |
-| `/api/characters/[id]` | GET/PATCH/DELETE | 单角色 CRUD |
-| `/api/stories/[id]/timeline` | GET/POST | 获取/修正时间轴 |
-| `/api/stories/[id]/director` | GET/PATCH | 获取/更新导演状态 |
-| `/api/lorebook` | GET/POST | 设定集查询/新增 |
-| `/api/knowledge/search` | GET | 搜索历史知识 |
-| `/api/knowledge/factcheck` | POST | 事实核查 |
-
-### 使用指南
+### ChronosMirror 功能
 
 **创建角色：** 在故事详情页的角色面板中添加角色，填写姓名、朝代、角色定位、性格特质、口癖和核心动机。角色会自动关联到续写 prompt。
 
@@ -380,10 +281,11 @@ ChronosMirror 在古事基础上新增了角色深度建模、时间轴校验、
 - 添加叙事约束（如"不得出现火器"）
 
 **控制节奏：** 在续写时选择节奏参数：
-- `detailed`：详细叙事，每步最多 50 行，适合高潮场景
-- `moderate`：中等节奏，每步最多 25 行，默认模式
-- `fast`：快节奏，每步最多 10 行，适合过渡场景
+- `detailed`：详细叙事，适合高潮场景
+- `rush`：快节奏，适合过渡场景
+- `pause`：暂停，适合情感沉淀
+- `summary`：概述，适合快速推进
 
----
+## 许可证
 
-**古事** - 让历史故事焕发新的生命力 📚✨
+本项目采用 MIT 许可证 - 查看 [LICENSE](LICENSE) 文件了解详情

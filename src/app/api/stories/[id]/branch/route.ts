@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { storiesStore, segmentsStore, branchesStore, getOrderedChain, type StorySegment } from '@/lib/simple-db';
 import { characterManager } from '@/lib/character-engine';
+import { buildFullPrompt } from '@/lib/prompt-builder';
+import { callAIText } from '@/lib/ai-client';
 
 export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
   try {
@@ -66,48 +68,22 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     const idx = mainChain.findIndex(s => s.id === segmentId);
     const relevantChain = idx >= 0 ? mainChain.slice(0, idx + 1) : mainChain;
 
-    const contextSummary = relevantChain.map((s: StorySegment) =>
-      `${s.title ? `【${s.title}】` : ''}${s.content}`
-    ).join('\n');
-
-    const prompt = `故事标题：${story.title}
-故事背景：${story.description || ''}
-
-当前故事进展：
-${contextSummary}
-
-用户希望的故事走向：${userDirection}
-
-请根据用户指定的方向，续写下一段（150-300字），保持古典文学风格，与前文情节连续。`;
-
-    const baseUrl = process.env.AI_BASE_URL || 'https://open.bigmodel.cn/api/paas/v4';
-    const apiKey = process.env.AI_API_KEY || '';
-    const model = process.env.AI_MODEL || 'glm-5.1';
-
-    const aiResponse = await fetch(`${baseUrl}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model,
-        messages: [
-          { role: 'system', content: '你是一位精通中国历史的文学作家，擅长古典文学风格的写作。请用中文回答。' },
-          { role: 'user', content: prompt }
-        ],
-        temperature: 0.7,
-        max_tokens: 2000
-      })
+    // 使用 buildFullPrompt 构建完整的上下文 prompt
+    const tailSegment = relevantChain[relevantChain.length - 1];
+    const prompt = await buildFullPrompt({
+      storyId,
+      branchId: 'main', // 分叉点在主线
+      tailSegment,
+      chain: relevantChain,
+      storyTitle: story.title,
+      storyDescription: story.description,
     });
 
-    if (!aiResponse.ok) {
-      const text = await aiResponse.text();
-      throw new Error(`AI API error ${aiResponse.status}: ${text}`);
-    }
+    // 在 prompt 末尾追加用户分叉方向
+    const finalPrompt = `${prompt}\n\n用户希望的故事走向：${userDirection}\n\n请根据用户指定的方向，续写下一段（150-300字），与前文情节连续。`;
 
-    const data = await aiResponse.json();
-    const aiContent = data.choices?.[0]?.message?.content || '';
+    // 使用统一的 AI 客户端调用
+    const aiContent = await callAIText(finalPrompt, { maxTokens: 2000, story });
 
     // Create new segment on the new branch
     const newSegment: StorySegment = {

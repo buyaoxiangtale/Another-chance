@@ -30,32 +30,17 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     }
     const tailSegment = chain[chain.length - 1];
 
-    // Build prompt
-    let prompt: string;
-    if (pacingConfig || directorOverrides) {
-      prompt = await buildFullPrompt({
-        storyId,
-        branchId,
-        tailSegment,
-        chain,
-        storyTitle: story.title,
-        storyDescription: story.description,
-        pacingConfig,
-        directorOverrides,
-      });
-    } else {
-      const contextSummary = chain.map((s: StorySegment) =>
-        `${s.title ? `【${s.title}】` : ''}${s.content}`
-      ).join('\n');
-
-      prompt = `故事标题：${story.title}
-故事背景：${story.description || ''}
-
-当前故事进展：
-${contextSummary}
-
-请续写下一段（150-300字），保持古典文学风格，与前文情节连续。`;
-    }
+    // Build prompt — 统一使用 buildFullPrompt，确保所有改进都生效
+    const prompt = await buildFullPrompt({
+      storyId,
+      branchId,
+      tailSegment,
+      chain,
+      storyTitle: story.title,
+      storyDescription: story.description,
+      pacingConfig,
+      directorOverrides,
+    });
 
     const pacingEngine = pacingConfig ? new PacingEngine(pacingConfig) : null;
 
@@ -81,19 +66,10 @@ ${contextSummary}
       warnings: consistencyWarnings.length > 0 ? consistencyWarnings : undefined,
     };
 
-    // 根据故事类型调整AI参数
-    const genre = (story as any)?.genre || '';
-    const fictionKeywords = ['演义', '架空', '同人', '玄幻', '仙侠', '魔幻', '穿越', '重生', '武侠', '奇幻', '轻小说', '网文'];
-    const isFiction = fictionKeywords.some(k => genre.includes(k));
-    const isHistory = genre.includes('正史') || genre.includes('历史') || !isFiction;
-    
-    // 根据故事类型设置temperature：正史类更严格，同人类允许更多创意
-    const temperature = isHistory ? 0.4 : (isFiction ? 0.6 : 0.5);
-    
     const maxTokens = pacingConfig?.pace === 'detailed' ? 4000 : 2000;
 
     // 使用统一的 AI 客户端
-    const { url, headers, body } = buildOpenAIRequest(prompt, '你是一位精通中国历史的文学作家，擅长古典文学风格的写作。请用中文回答。', maxTokens, story);
+    const { url, headers, body } = buildOpenAIRequest(prompt, undefined, maxTokens, story);
     
     const aiResponse = await fetch(url, {
       method: 'POST',

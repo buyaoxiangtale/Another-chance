@@ -226,6 +226,7 @@ export async function buildFullPrompt(options: BuildPromptOptions): Promise<stri
 
   const budgets = allocateTokenBudget(tokenBudget);
   const parts: string[] = [];
+  const _fandomForbiddenItems: string[] = []; // 收集原著禁止事项，后面合并到 forbiddenItems
 
   // 提前查询 story（多处需要用到）
   const story = (await storiesStore.load()).find((s: any) => s.id === storyId);
@@ -371,8 +372,8 @@ const eventTracker = new EventTracker();
     // Facts enrichment failed, skip gracefully
   }
 
-  // ─── 8. 世界观 — 时间轴 + Lorebook (dynamic budget) ───
-  // 同人/玄幻等架空作品不注入历史 Lorebook，避免世界观冲突
+  // ─── 8. 世界观 — 时间轴 + Lorebook/FandomLorebook (dynamic budget) ───
+  // 正史作品注入历史 Lorebook，同人/虚构作品注入原著知识库
   try {
     const timeline = await timelineEngine.getTimeline(storyId, branchId);
     let timelinePrompt = '';
@@ -381,7 +382,7 @@ const eventTracker = new EventTracker();
       const loreEntries = era ? await lorebook.getEntries(era) : await lorebook.getAll();
       timelinePrompt = buildTimelinePrompt(timeline, loreEntries);
     } else if (timeline.length > 0) {
-      // 虚构作品只保留时间轴，不注入历史 Lorebook
+      // 虚构作品只保留时间轴
       timelinePrompt = '## 时间线\n' + timeline.map(e => {
         const season = e.season ? `·${e.season}` : '';
         return `- ${e.description}${season}`;
@@ -389,6 +390,31 @@ const eventTracker = new EventTracker();
     }
     if (timelinePrompt.trim()) {
       parts.push(timelinePrompt);
+    }
+
+    // 同人/虚构作品：自动匹配并注入原著知识库
+    if (isFiction) {
+      try {
+        const { fandomLorebook } = await import('./fandom-lorebook');
+        const storyDesc = (story as any)?.description || storyDescription || '';
+        const { fandom, entries } = await fandomLorebook.matchFandom(storyDesc, effectiveGenre);
+        if (entries.length > 0) {
+          const fandomPrompt = fandomLorebook.buildFandomPrompt(entries);
+          if (fandomPrompt.trim()) {
+            parts.push(fandomPrompt);
+          }
+          // 将原著禁止事项暂存到 parts 之外，后面合并到 forbiddenItems
+          const forbiddenEntries = entries.filter((e: any) => e.topic === '禁止事项');
+          for (const fe of forbiddenEntries) {
+            const matches = fe.content.match(/【[^】]+】[^。\n]+[。\n]/g);
+            if (matches) {
+              _fandomForbiddenItems.push(...matches.slice(0, 5).map((m: string) => m.trim()));
+            }
+          }
+        }
+      } catch {
+        // FandomLorebook 不可用时跳过
+      }
     }
   } catch {
     // skip
@@ -432,6 +458,10 @@ const eventTracker = new EventTracker();
     '不得让已死亡角色重新活跃', 
     '不得改变已建立的角色性格'
   ];
+  // 合并原著知识库的禁止事项
+  if (_fandomForbiddenItems.length > 0) {
+    forbiddenItems.push(..._fandomForbiddenItems);
+  }
 
   try {
     // 从摘要中提取 foreshadowing 信息

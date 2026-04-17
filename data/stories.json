@@ -5,14 +5,16 @@
     "description": "基于荆轲刺秦王历史事件的故事续写平台，探索不同历史转折点",
     "author": "历史故事组",
     "createdAt": "2026-04-12T09:59:44.221Z",
-    "updatedAt": "2026-04-12T09:59:44.221Z",
+    "updatedAt": "2026-04-17T10:12:29.571Z",
     "characterIds": [
       "char_mnzwozgz_xb5tn0",
       "char_mnzwozh2_s4ep5q",
       "char_mnzwozh2_h2lsum",
       "char_mnzwozh2_ednzgg",
       "char_mnzwozh2_ay0kep"
-    ]
+    ],
+    "genre": "正史",
+    "era": "战国"
   },
   {
     "id": "story_2_赤壁之战",
@@ -60,7 +62,9 @@
     "description": "火影忍者同人，带土重生带着双万花筒写轮眼回到了9岁，上忍者学校，他带着前世的记忆",
     "author": "buyaoxiantale",
     "createdAt": "2026-04-17T04:58:46.668Z",
-    "updatedAt": "2026-04-17T04:58:46.668Z",
-    "rootSegmentId": "seg_1776401926668_7fpj7z8jb"
+    "updatedAt": "2026-04-17T10:12:33.404Z",
+    "rootSegmentId": "seg_1776401926668_7fpj7z8jb",
+    "genre": "同人",
+    "era": "火影忍者"
   }
 ]

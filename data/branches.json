@@ -52,5 +52,25 @@
     "userDirection": "专注内政发展",
     "createdAt": "2026-04-13T13:00:11.499Z",
     "updatedAt": "2026-04-13T13:00:11.499Z"
+  },
+  {
+    "id": "branch_1776422016934_v7w2ah",
+    "title": "分叉: 带土开始了学习以及为木叶村做贡献",
+    "sourceSegmentId": "seg_1776421547880_pv25vn",
+    "storyId": "story_1776401926668_wt100dv7t",
+    "userDirection": "带土开始了学习以及为木叶村做贡献",
+    "characterStateSnapshot": {},
+    "createdAt": "2026-04-17T10:33:36.935Z",
+    "updatedAt": "2026-04-17T10:33:36.935Z"
+  },
+  {
+    "id": "branch_1776424006628_nwbspy",
+    "title": "分叉: 带土开始了学习以及为木叶村做贡献",
+    "sourceSegmentId": "seg_1776403366954_at59gs",
+    "storyId": "story_1776401926668_wt100dv7t",
+    "userDirection": "带土开始了学习以及为木叶村做贡献",
+    "characterStateSnapshot": {},
+    "createdAt": "2026-04-17T11:06:46.628Z",
+    "updatedAt": "2026-04-17T11:06:46.628Z"
   }
 ]

@@ -98,6 +98,8 @@ function extractSummaryFromSegment(segment: StorySegment, chain: StorySegment[])
   const events: string[] = [];
   const eventPatterns = [
     /[^。]*?死[^。]*?[。！？]/g,
+    /[^。]*?亡[^。]*?[。！？]/g,
+    /[^。]*?伤[^。]*?[。！？]/g,
     /[^。]*?败[^。]*?[。！？]/g,
     /[^。]*?胜[^。]*?[。！？]/g,
     /[^。]*?结盟[^。]*?[。！？]/g,

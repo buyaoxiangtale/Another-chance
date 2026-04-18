@@ -17,6 +17,16 @@ function estimateTokens(text: string): number {
 }
 
 /**
+ * 解析 AI 返回的 JSON（容忍 ```json ``` 代码块包裹）
+ */
+function parseAIJson(response: string): any {
+  let cleaned = response.trim();
+  const codeBlockMatch = cleaned.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/);
+  if (codeBlockMatch) cleaned = codeBlockMatch[1].trim();
+  return JSON.parse(cleaned);
+}
+
+/**
  * AI 调用方法，复用项目已有的 AI 调用配置
  */
 async function callAI(prompt: string, maxTokens: number = 1000, systemPrompt?: string, genre?: string): Promise<string> {
@@ -181,14 +191,12 @@ const AISUMMARY_PROMPT = `你是一位专业的故事摘要专家，擅长从文
  * 使用 AI 生成段落摘要（1.2 改造 extractSummaryFromSegment 为 generateAISummary）
  */
 async function generateAISummary(segment: StorySegment, chain: StorySegment[], genre?: string): Promise<SegmentSummary> {
-  // 先尝试从缓存获取
+  // 段落内容写入后不会变，摘要永久缓存
   const all = await summariesStore.load();
   const cached = all.find(
     (s: SegmentSummary) => s.segmentId === segment.id && s.branchId === segment.branchId
   );
-  if (cached && cached.updatedAt > new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()) {
-    return cached;
-  }
+  if (cached) return cached;
 
   try {
     // 构建AI prompt
@@ -197,10 +205,10 @@ async function generateAISummary(segment: StorySegment, chain: StorySegment[], g
     // 调用 AI 生成结构化摘要
     const aiResponse = await callAI(prompt, 800, undefined, genre);
     
-    // 解析 AI 返回的 JSON
+    // 解析 AI 返回的 JSON（容忍 ```json ``` 包裹）
     let summary: any;
     try {
-      summary = JSON.parse(aiResponse);
+      summary = parseAIJson(aiResponse);
     } catch (e) {
       console.warn('AI 摘要 JSON 解析失败，使用 fallback:', e);
       throw new Error('AI response parsing failed');

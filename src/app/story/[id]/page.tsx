@@ -277,6 +277,29 @@ export default function StoryDetailPage({ params }: { params: { id: string } }) 
     setCurrentBranchId(branchId);
   };
 
+  const handleDeleteBranch = async (branchId: string, branchLabel: string) => {
+    if (branchId === 'main') return;
+    const ok = confirm(`确定要删除分支「${branchLabel}」吗？\n该分支下的所有段落（包括从此分支再分叉的子分支）都将被永久删除，无法恢复。`);
+    if (!ok) return;
+
+    try {
+      const res = await fetch(`/api/stories/${id}/branch/${branchId}`, { method: 'DELETE' });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || '删除失败');
+      }
+
+      // 若当前正在查看被删除的分支，先切回主线
+      if (currentBranchId === branchId) {
+        setCurrentBranchId('main');
+      }
+      await loadTree();
+      await loadBranchSegments(currentBranchId === branchId ? 'main' : currentBranchId);
+    } catch (e) {
+      alert('删除分支失败: ' + (e instanceof Error ? e.message : '请重试'));
+    }
+  };
+
   const getCurrentBranchPath = () => {
     if (currentBranchId === 'main') return ['主线'];
     const branch = branches.find(b => b.id === currentBranchId);
@@ -311,7 +334,7 @@ export default function StoryDetailPage({ params }: { params: { id: string } }) 
 
   const tailSegment = getTailSegment();
 
-  const BranchDialog = () => (
+  const branchDialog = (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
       <div className="bg-white rounded-xl border border-[var(--border)] p-6 max-w-lg w-full mx-4 shadow-xl">
         {branching ? (
@@ -485,18 +508,38 @@ export default function StoryDetailPage({ params }: { params: { id: string } }) 
                   currentBranchId === 'main' ? 'bg-[var(--gold)] text-[var(--paper)]' : 'bg-[var(--border)] text-[var(--muted)] hover:bg-[var(--gold)]/20'
                 }`}
               >主线</button>
-              {branches.map((branch) => (
-                <button
-                  key={branch.id}
-                  onClick={() => switchBranch(branch.id)}
-                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                    currentBranchId === branch.id ? 'bg-[var(--accent)] text-white' : 'bg-[var(--border)] text-[var(--muted)] hover:bg-[var(--accent)]/20'
-                  }`}
-                  title={branch.userDirection}
-                >
-                  <span className="truncate max-w-32">{branch.userDirection || branch.title}</span>
-                </button>
-              ))}
+              {branches.map((branch) => {
+                const isActive = currentBranchId === branch.id;
+                const label = branch.userDirection || branch.title;
+                return (
+                  <div
+                    key={branch.id}
+                    className={`group inline-flex items-center rounded-lg overflow-hidden transition-colors ${
+                      isActive ? 'bg-[var(--accent)] text-white' : 'bg-[var(--border)] text-[var(--muted)] hover:bg-[var(--accent)]/20'
+                    }`}
+                  >
+                    <button
+                      onClick={() => switchBranch(branch.id)}
+                      className="px-3 py-1.5 text-sm font-medium"
+                      title={branch.userDirection}
+                    >
+                      <span className="truncate max-w-32 inline-block align-middle">{label}</span>
+                    </button>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleDeleteBranch(branch.id, label); }}
+                      className={`px-1.5 py-1.5 text-xs leading-none transition-opacity ${
+                        isActive
+                          ? 'text-white/80 hover:text-white hover:bg-black/15'
+                          : 'opacity-0 group-hover:opacity-100 text-[var(--muted)] hover:text-[var(--accent)] hover:bg-[var(--accent)]/10'
+                      }`}
+                      title="删除此分支"
+                      aria-label={`删除分支 ${label}`}
+                    >
+                      ×
+                    </button>
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>
@@ -715,7 +758,7 @@ export default function StoryDetailPage({ params }: { params: { id: string } }) 
         )}
       </div>
 
-      {showBranchDialog && <BranchDialog />}
+      {showBranchDialog && branchDialog}
 
       {/* 编辑故事信息弹窗 */}
       {showEditModal && (

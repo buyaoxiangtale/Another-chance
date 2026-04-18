@@ -4,6 +4,7 @@ import { buildFullPrompt } from '@/lib/prompt-builder';
 import { PacingEngine } from '@/lib/pacing-engine';
 import { consistencyChecker } from '@/lib/consistency-checker';
 import { callAI, buildOpenAIRequest } from '@/lib/ai-client';
+import { contextSummarizer } from '@/lib/context-summarizer';
 
 /**
  * 5.2 + 5.4 + 5.5 改造 stream-continue route
@@ -194,6 +195,10 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
 
           allSegments.push(newSegment);
           await segmentsStore.save(allSegments);
+
+          // 异步预生成新段落摘要（下次续写直接命中缓存，避免续写时同步调用 AI）
+          contextSummarizer.generateSegmentSummary(newSegment, [...chain, newSegment], story?.genre)
+            .catch(e => console.warn('[stream-continue] 摘要预生成失败（非致命）:', e));
 
           // C3: 续写后检测新内容矛盾
           try {

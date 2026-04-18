@@ -206,8 +206,8 @@ interface StoryBranch {
 
 ```env
 AI_API_KEY=your_api_key
-AI_BASE_URL=https://api.openai.com/v1
-AI_MODEL=gpt-3.5-turbo
+AI_BASE_URL=https://open.bigmodel.cn/api/coding/paas/v4
+AI_MODEL=glm-5.1
 ```
 
 支持任何 OpenAI 兼容的 API 服务（如 DeepSeek、通义千问等），修改 `AI_BASE_URL` 即可。

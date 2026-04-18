@@ -5,6 +5,7 @@ import { directorManager } from '@/lib/director-manager';
 import { timelineEngine } from '@/lib/timeline-engine';
 import { consistencyChecker } from '@/lib/consistency-checker';
 import { callAIText } from '@/lib/ai-client';
+import { FICTION_KEYWORDS, classifyGenre } from '@/lib/genre-config';
 
 /**
  * 5.1 改造 continue route — 支持 pacingConfig 和 directorOverrides 参数
@@ -68,8 +69,8 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     } else {
       // 向后兼容：不传 pacingConfig 时使用原始逻辑
       const genre = (story as any)?.genre || '';
-      const fictionKeywords = ['演义', '架空', '同人', '玄幻', '仙侠', '魔幻', '穿越', '重生', '武侠', '奇幻', '轻小说', '网文'];
-      const isFiction = fictionKeywords.some(k => genre.includes(k));
+      const description = (story as any)?.description || story.description || '';
+      const { effectiveGenre, isFiction } = classifyGenre(genre, description);
       const styleHint = isFiction
         ? '请用现代白话文续写'
         : '请用古风文体续写';
@@ -89,13 +90,35 @@ ${styleHint}下一段（150-300字），与前文情节连续。`;
 
     // 根据 pacingConfig 调整 max_tokens
     const maxTokens = pacingConfig?.pace === 'detailed' ? 4000 : 2000;
+
+    // 根据 genre 推断选择 systemPrompt
+    const _genre = (story as any)?.genre || '';
+    const _desc = (story as any)?.description || story.description || '';
+    const { isFiction: _isFiction, effectiveGenre: _eff } = classifyGenre(_genre, _desc);
+    const systemPrompt = _isFiction
+      ? '你是一位专业的文学作家。请用中文回答，用现代白话文写作，保持与前文的风格和情节连续性。'
+      : '你是一位擅长中国历史题材的文学作家。请用中文回答，保持与前文的风格和情节连续性。';
+
     const aiResponse = await callAIText(prompt, {
-      systemPrompt: '你是一位擅长中国历史题材的文学作家。请用中文回答，保持与前文的风格和情节连续性。',
+      systemPrompt,
       maxTokens,
       story
     });
 
     const segments = await segmentsStore.load();
+
+    // 检查 AI 返回内容是否为空
+    if (!aiResponse || aiResponse.trim().length === 0) {
+      return NextResponse.json({
+        success: false,
+        error: 'AI 未生成有效内容，请重试',
+        warnings: {
+          consistency: consistencyWarnings,
+          timeline: timelineWarnings,
+        }
+      }, { status: 500 });
+    }
+
     const newSegment: StorySegment = {
       id: `seg_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
       storyId,

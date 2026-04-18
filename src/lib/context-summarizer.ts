@@ -5,6 +5,7 @@
 
 import { segmentsStore, summariesStore, type StorySegment } from './simple-db';
 import type { SegmentSummary, GroupSummary, ChapterSummary } from '@/types/context-summary';
+import { FICTION_KEYWORDS } from './genre-config';
 
 /**
  * 估算文本的 token 数（中文约 1.5 字/token，英文约 4 字符/token）
@@ -39,8 +40,7 @@ async function callAI(prompt: string, maxTokens: number = 1000, systemPrompt?: s
   let frequency_penalty = 0.3;
 
   if (genre) {
-    const fictionKeywords = ['演义', '架空', '同人', '玄幻', '仙侠', '魔幻', '穿越', '重生', '武侠', '架空历史', '奇幻', '轻小说', '网文'];
-    const isFiction = fictionKeywords.some(k => genre.includes(k));
+    const isFiction = FICTION_KEYWORDS.some(k => genre.includes(k));
     
     if (isFiction) {
       // 同人类：允许更多创意

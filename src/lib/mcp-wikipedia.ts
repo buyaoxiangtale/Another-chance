@@ -3,6 +3,8 @@
  * 使用中文维基百科 API 检索历史事实
  */
 
+import { FICTION_KEYWORDS } from './genre-config';
+
 const WIKI_API = 'https://zh.wikipedia.org/w/api.php';
 
 export interface WikiSearchResult {
@@ -205,8 +207,7 @@ export interface StoryContext {
 export function shouldPreferHistory(ctx?: StoryContext): boolean {
   if (!ctx?.genre) return true; // 默认优先正史
 
-  const fictionKeywords = ['演义', '架空', '同人', '玄幻', '仙侠', '魔幻', '穿越', '重生', '武侠', '架空历史', '奇幻', '轻小说', '网文'];
-  const isFiction = fictionKeywords.some(k => ctx.genre && ctx.genre.includes(k));
+  const isFiction = FICTION_KEYWORDS.some(k => ctx.genre && ctx.genre.includes(k));
 
   if (isFiction) return false;
 

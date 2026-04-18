@@ -31,6 +31,17 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     }
     const tailSegment = chain[chain.length - 1];
 
+    // ─── 诊断日志：续写请求入口 ───
+    console.log('\n' + '='.repeat(70));
+    console.log(`\x1b[36m[stream-continue]\x1b[0m 续写请求`);
+    console.log(`  storyId:    ${storyId}`);
+    console.log(`  title:      ${story.title}`);
+    console.log(`  story.genre: ${(story as any)?.genre || '(空)'}`);
+    console.log(`  story.desc:  ${(story.description || '').slice(0, 80)}...`);
+    console.log(`  chainLen:   ${chain.length} 段`);
+    console.log(`  pacing:     ${pacingConfig?.pace || '(无)'}`);
+    console.log('='.repeat(70));
+
     // Build prompt — 统一使用 buildFullPrompt，确保所有改进都生效
     const prompt = await buildFullPrompt({
       storyId,
@@ -71,11 +82,16 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
 
     // 使用统一的 AI 客户端
     const { url, headers, body } = buildOpenAIRequest(prompt, undefined, maxTokens, story);
-    
+
+    // 启用流式响应
+    const bodyObj = JSON.parse(body);
+    bodyObj.stream = true;
+    const streamBody = JSON.stringify(bodyObj);
+
     const aiResponse = await fetch(url, {
       method: 'POST',
       headers,
-      body: body.replace('"stream": false', '"stream": true') // 启用流式响应
+      body: streamBody
     });
 
     if (!aiResponse.ok) {
@@ -167,6 +183,15 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString()
           };
+
+          // 检查内容是否为空
+          if (!fullContent || fullContent.trim().length === 0) {
+            const errorEvent = { type: 'error', message: 'AI 未生成有效内容，请重试' };
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify(errorEvent)}\n\n`));
+            controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+            controller.close();
+            return;
+          }
 
           allSegments.push(newSegment);
           await segmentsStore.save(allSegments);

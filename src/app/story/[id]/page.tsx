@@ -758,6 +758,12 @@ export default function StoryDetailPage({ params }: { params: { id: string } }) 
                     <option value="穿越">穿越</option>
                     <option value="武侠">武侠</option>
                     <option value="奇幻">奇幻</option>
+                    <option value="科幻">科幻</option>
+                    <option value="末世">末世</option>
+                    <option value="悬疑">悬疑</option>
+                    <option value="都市">都市</option>
+                    <option value="军事">军事</option>
+                    <option value="现代">现代</option>
                   </select>
                 </div>
                 <div>

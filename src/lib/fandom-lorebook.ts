@@ -5,6 +5,7 @@
 
 import fs from 'fs/promises';
 import path from 'path';
+import { FICTION_KEYWORDS } from './genre-config';
 
 const DATA_DIR = path.join(process.cwd(), 'data');
 
@@ -69,8 +70,7 @@ class FandomLorebook {
 
     // 同人类型才匹配
     if (genre) {
-      const fictionKeywords = ['演义', '架空', '同人', '玄幻', '仙侠', '魔幻', '穿越', '重生', '武侠', '奇幻', '轻小说', '网文'];
-      if (!fictionKeywords.some(k => genre.includes(k))) return { fandom: '', entries: [] };
+      if (!FICTION_KEYWORDS.some(k => genre.includes(k))) return { fandom: '', entries: [] };
     }
 
     // 按 fandom 分组，计算每个作品的关键词匹配分

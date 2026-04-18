@@ -30,6 +30,17 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     }
     const tailSegment = chain[chain.length - 1];
 
+    // ─── 诊断日志：续写请求入口 ───
+    console.log('\n' + '='.repeat(70));
+    console.log(`\x1b[36m[stream-continue]\x1b[0m 续写请求`);
+    console.log(`  storyId:    ${storyId}`);
+    console.log(`  title:      ${story.title}`);
+    console.log(`  story.genre: ${(story as any)?.genre || '(空)'}`);
+    console.log(`  story.desc:  ${(story.description || '').slice(0, 80)}...`);
+    console.log(`  chainLen:   ${chain.length} 段`);
+    console.log(`  pacing:     ${pacingConfig?.pace || '(无)'}`);
+    console.log('='.repeat(70));
+
     // Build prompt — 统一使用 buildFullPrompt，确保所有改进都生效
     const prompt = await buildFullPrompt({
       storyId,

@@ -4,6 +4,7 @@
  */
 
 import { type Story } from '@/lib/simple-db';
+import { FICTION_KEYWORDS } from './genre-config';
 
 /**
  * AI 模型配置
@@ -29,8 +30,7 @@ export interface GenerationParams {
  */
 export function getGenerationParams(story: Story): GenerationParams {
   const genre = story.genre || '';
-  const fictionKeywords = ['演义', '架空', '同人', '玄幻', '仙侠', '魔幻', '穿越', '重生', '武侠', '奇幻', '轻小说', '网文'];
-  const isFiction = fictionKeywords.some(k => genre.includes(k));
+  const isFiction = FICTION_KEYWORDS.some(k => genre.includes(k));
   const isHistory = genre.includes('正史') || genre.includes('历史') || !isFiction;
   
   // 根据故事类型设置temperature：正史类更严格（0.4），同人类允许更多创意（0.6），其他类型默认（0.5）
@@ -68,7 +68,7 @@ export function buildOpenAIRequest(
   const params = story ? getGenerationParams(story) : getGenerationParams({} as Story);
   
   const messages = [
-    { role: 'system', content: systemPrompt || '你是一位擅长中国历史题材的文学作家。请用中文回答，保持与前文的风格和情节连续性。' },
+    { role: 'system', content: systemPrompt || '你是一位专业的文学作家。请用中文回答，保持与前文的风格和情节连续性。' },
     { role: 'user', content: prompt }
   ];
   

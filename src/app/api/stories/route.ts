@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { storiesStore, segmentsStore, type Story, type StorySegment } from '@/lib/simple-db';
+import { STORY_TYPE_TO_GENRE } from '@/lib/genre-config';
 
 export async function GET() {
   try {
@@ -30,7 +31,7 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { title, description, author } = body;
+    const { title, description, author, genre, era, storyType } = body;
 
     if (!title) {
       return NextResponse.json(
@@ -51,11 +52,15 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    const effectiveGenre = genre || (storyType ? STORY_TYPE_TO_GENRE[storyType] : undefined);
+
     const newStory: Story = {
       id: `story_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       title,
       description: description || '',
       author: author || '佚名',
+      genre: effectiveGenre,
+      era: era || undefined,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };

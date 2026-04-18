@@ -24,6 +24,7 @@ import { branchMemory } from './branch-memory';
 import type { PacingConfig, DirectorState, StorySegment } from '@/types/story';
 import { storiesStore, getOrderedChain } from './simple-db';
 import { summariesStore } from './simple-db';
+import { INFER_PATTERNS, FICTION_KEYWORDS } from './genre-config';
 
 export interface BuildPromptOptions {
   storyId: string;
@@ -234,22 +235,7 @@ export async function buildFullPrompt(options: BuildPromptOptions): Promise<stri
   const description = (story as any)?.description || storyDescription || '';
 
   // 从 description 自动推断 genre（如果用户没填）
-  const INFER_PATTERNS: Record<string, string[]> = {
-    '同人': ['火影', '鸣人', '佐助', '带土', '卡卡西', '写轮眼', '查克拉', '木叶', '轮回眼',
-            '海贼', '路飞', '恶魔果实', '七武海',
-            '龙珠', '悟空', '贝吉塔', '超级赛亚人',
-            '死神', '一护', '斩魄刀', '护廷十三队',
-            '柯南', '灰原', '小兰', '毛利',
-            '哈利', '波特', '霍格沃茨', '伏地魔',
-            '漫威', '钢铁侠', '蜘蛛侠', '复仇者',
-            'DC', '蝙蝠侠', '超人', '正义联盟',
-            '原神', '钟离', '雷电', '旅行者', '提瓦特'],
-    '玄幻': ['修仙', '修真', '灵力', '灵气', '元婴', '金丹', '飞升', '天劫', '仙尊', '魔尊', '剑修', '丹药'],
-    '仙侠': ['剑仙', '仙人', '天庭', '妖魔', '渡劫', '法宝', '符箓'],
-    '穿越': ['重生', '穿越', '回到', '前世', '来世', '回到过去', '穿越回'],
-    '武侠': ['武功', '内力', '轻功', '江湖', '侠客', '门派', '武功秘籍', '掌门'],
-    '架空': ['架空', '异世界', '平行世界', '位面', '另一个世界'],
-  };
+  // INFER_PATTERNS 已集中管理在 genre-config.ts
 
   let inferredGenre = '';
   if (!rawGenre) {
@@ -261,16 +247,57 @@ export async function buildFullPrompt(options: BuildPromptOptions): Promise<stri
     }
   }
   const effectiveGenre = rawGenre || inferredGenre;
-  const fictionKeywords = ['演义', '架空', '同人', '玄幻', '仙侠', '魔幻', '穿越', '重生', '武侠', '奇幻', '轻小说', '网文'];
-  const isFiction = fictionKeywords.some(k => effectiveGenre.includes(k));
-  const styleInstruction = isFiction
-    ? `你是一位擅长历史题材的文学作家。请用现代白话文写作，语言流畅生动，可适度使用古风词汇增加氛围感。保持与前文的风格和情节连续性。`
-    : '你是一位精通中国历史的文学作家，擅长古典文学风格的写作。请用半文半白的古风文体写作，保持与前文的风格和情节连续性。';
+  const isFiction = FICTION_KEYWORDS.some(k => effectiveGenre.includes(k));
+
+  // ─── 诊断日志：Genre 分类决策 ───
+  console.log('\n' + '-'.repeat(60));
+  console.log('\x1b[33m[prompt-builder]\x1b[0m Genre 分类决策流程');
+  console.log(`  Step 1 rawGenre:      "\x1b[31m${rawGenre}\x1b[0m"`);
+  console.log(`  Step 2 inferredGenre:  "\x1b[32m${inferredGenre}\x1b[0m"${inferredGenre ? ` (从description匹配)` : ' (未匹配任何模式)'}`);
+  console.log(`  Step 3 effectiveGenre: "\x1b[36m${effectiveGenre || '(空)'}\x1b[0m"`);
+  console.log(`  Step 4 isFiction:      \x1b[${isFiction ? '32' : '31'}m${isFiction}\x1b[0m`);
+  console.log(`  description 前80字:    "${description.slice(0, 80)}"`);
+  console.log('-'.repeat(60));
+
+  // 根据 effectiveGenre 选择风格指令
+  let styleInstruction: string;
+  if (effectiveGenre === '科幻' || effectiveGenre === '末世') {
+    styleInstruction = '你是一位擅长科幻题材的文学作家。请用现代白话文写作，语言流畅生动，注重科学逻辑和想象力。保持与前文的风格和情节连续性。';
+  } else if (effectiveGenre === '悬疑') {
+    styleInstruction = '你是一位擅长悬疑推理题材的文学作家。请用现代白话文写作，语言流畅生动，注重悬念和逻辑推理。保持与前文的风格和情节连续性。';
+  } else if (effectiveGenre === '都市' || effectiveGenre === '现代') {
+    styleInstruction = '你是一位擅长现代都市题材的文学作家。请用现代白话文写作，语言流畅生动，贴近当代生活。保持与前文的风格和情节连续性。';
+  } else if (isFiction) {
+    styleInstruction = '你是一位擅长虚构文学的文学作家。请用现代白话文写作，语言流畅生动，可适度使用古风词汇增加氛围感。保持与前文的风格和情节连续性。';
+  } else {
+    styleInstruction = '你是一位精通中国历史的文学作家，擅长古典文学风格的写作。请用半文半白的古风文体写作，保持与前文的风格和情节连续性。';
+  }
+  console.log(`  \x1b[35m→ 风格指令:\x1b[0m ${styleInstruction}`);
   parts.push(styleInstruction);
 
   // 如果自动推断出了 genre，在 prompt 中明确告知 AI
   if (inferredGenre && !rawGenre) {
     parts.push(`【重要】本作品类型为"${inferredGenre}"，请严格遵循故事描述中的世界观设定，不要将其与真实历史混淆。`);
+  }
+
+  // ─── 1.5 风格覆盖指令：当虚构类型的前文却用了古风文体时，强制覆盖 ───
+  if (isFiction && effectiveGenre !== '武侠' && effectiveGenre !== '仙侠' && effectiveGenre !== '玄幻') {
+    // 检测前文是否用了古风文体（抽样最近 2 段）
+    const recentText = chain.slice(-2).map(s => s.content).join('');
+    const gufengSignals = ['之', '其', '乃', '遂', '亦', '且', '皆', '此', '故', '然', '矣', '焉', '乎', '尔', '者'];
+    const gufengCount = gufengSignals.filter(ch => recentText.includes(ch)).length;
+    const isGufeng = gufengCount >= 5;
+
+    if (isGufeng) {
+      console.log(`  \x1b[35m→ 前文古风检测:\x1b[0m 检测到 ${gufengCount}/15 古风信号词，注入风格覆盖指令`);
+      parts.push(
+        `【风格覆盖指令 — 最高优先级】\n` +
+        `本作品属于"${effectiveGenre || '虚构'}"类型，必须使用现代白话文写作。\n` +
+        `前文因历史原因可能使用了古风半文半白的文体（如"之""其""乃""遂"等文言虚词），` +
+        `你必须立即停止模仿前文的古风风格，改用现代白话文续写。\n` +
+        `禁止使用文言虚词和古风句式。请用现代汉语的正常表达方式来叙述。`
+      );
+    }
   }
 
   // ─── 2. 故事元信息 (fixed) ───
@@ -517,11 +544,19 @@ const eventTracker = new EventTracker();
     ? new PacingEngine(pacingConfig).getWordInstruction()
     : '请续写下一段（150-300字）';
   const styleHint = isFiction
-    ? ''
+    ? '，使用现代白话文'
     : '，保持古典文学风格';
   parts.push(`${wordHint}${styleHint}，与前文情节连续。`);
 
   // ─── Assemble prompt ───
   const fullPrompt = parts.join('\n\n');
+
+  // ─── 诊断日志：最终 prompt 预览 ───
+  console.log('\n' + '-'.repeat(60));
+  console.log('\x1b[33m[prompt-builder]\x1b[0m 最终 Prompt 预览 (前300字):');
+  console.log('\x1b[90m' + fullPrompt.slice(0, 300) + '\x1b[0m');
+  console.log(`  总长度: ${fullPrompt.length} 字符`);
+  console.log('-'.repeat(60) + '\n');
+
   return fullPrompt;
 }

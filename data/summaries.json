@@ -94,5 +94,22 @@
     "originalTokenCount": 207,
     "createdAt": "2026-04-17T05:22:55.813Z",
     "updatedAt": "2026-04-17T05:22:55.813Z"
+  },
+  {
+    "segmentId": "seg_1776444664308_cka6i5o37",
+    "storyId": "story_1776444664307_2aglm3coj",
+    "branchId": "main",
+    "chainIndex": 0,
+    "summaryText": "【三体·开篇】\n《三体》的故事开始了...\n关键事件：《三体》故事开始",
+    "characterActions": [],
+    "keyEvents": [
+      "《三体》故事开始"
+    ],
+    "stateChanges": [],
+    "tokenCount": 18,
+    "originalTokenCount": 7,
+    "aiGenerated": true,
+    "createdAt": "2026-04-18T12:19:55.192Z",
+    "updatedAt": "2026-04-18T12:19:55.192Z"
   }
 ]

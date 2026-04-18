@@ -82,5 +82,25 @@
     "characterStateSnapshot": {},
     "createdAt": "2026-04-17T17:33:17.892Z",
     "updatedAt": "2026-04-17T17:33:17.892Z"
+  },
+  {
+    "id": "branch_1776515881317_n1jtzr",
+    "title": "分叉: 叶文洁放下仇恨，专攻科研",
+    "sourceSegmentId": "seg_1776444664308_cka6i5o37",
+    "storyId": "story_1776444664307_2aglm3coj",
+    "userDirection": "叶文洁放下仇恨，专攻科研",
+    "characterStateSnapshot": {},
+    "createdAt": "2026-04-18T12:38:01.318Z",
+    "updatedAt": "2026-04-18T12:38:01.318Z"
+  },
+  {
+    "id": "branch_1776515923811_1t02k4",
+    "title": "分叉: 叶文洁放下仇恨，专攻科研",
+    "sourceSegmentId": "seg_1776444664308_cka6i5o37",
+    "storyId": "story_1776444664307_2aglm3coj",
+    "userDirection": "叶文洁放下仇恨，专攻科研",
+    "characterStateSnapshot": {},
+    "createdAt": "2026-04-18T12:38:43.813Z",
+    "updatedAt": "2026-04-18T12:38:43.813Z"
   }
 ]

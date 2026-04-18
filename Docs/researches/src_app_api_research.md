@@ -58,7 +58,8 @@ drwxrwxr-x   6 pjlab pjlab   4096 Apr 13 22:53 src
 ./Docs/researches/src_app_story_research.md.tmp:33:  • Synthesize directory architecture and ChronosMirror upgrade gaps
 ./Docs/researches/src_app_story_research.md.tmp:55:- ChronosMirror upgrade gaps for persona modeling, timeline validation, MCP Wikipedia fact-checking, and pacing/director-mode control
 ./Docs/researches/src_app_story_research.md.tmp:78:- ChronosMirror upgrade gaps for persona modeling, timeline validation, MCP Wikipedia fact-checking, and pacing/director-mode control
-./Docs/researches/src_app_api_research.md.tmp:13:Analyze all source files in src/app/api/. For each file: purpose, exports, dependencies. Then: architecture overview and ChronosMirror upgrade gaps (character modeling, timeline validation, MCP Wikipedia, pacing control). Write results to /home/pjlab/fbh/fbh_project/gushi/Docs/researches/src_app_api_research.md
+./Docs/researches/src_app_api_research.md.tmp:13:Analyze all source files in src/app/api/. For each file: purpose, exports, dependencies. Then: architecture overview and ChronosMirror upgrade gaps (character modeling, timeline validation, MCP Wikipedia, pacing control). Write results to /home/pjlab/fbh/fbh_project/gushi/Docs/researches/src_app_api_research.md
+
 
  succeeded in 0ms:
 rg: lib: No such file or directory (os error 2)
@@ -1223,7 +1224,7 @@ npm run db:seed
 npm run dev
 ```
 
-6. **访问应用**
+6. **访问应用**30023002
 打开浏览器访问 [http://localhost:3000](http://localhost:3000)
 
 ### 使用 Docker 部署
@@ -2161,7 +2162,7 @@ AI_MODEL=dall-e-3
 
 # Next.js 配置
 NEXT_TELEMETRY_DISABLED=1
-NEXTAUTH_SECRET=your_nextauth_secret_here
+NEXTAUTH_SECRET=your_nextauth_3002et_here
 NEXTAUTH_URL=http://localhost:3000
 
 # 应用配置

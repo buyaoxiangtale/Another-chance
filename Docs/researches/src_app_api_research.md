@@ -1224,7 +1224,7 @@ npm run db:seed
 npm run dev
 ```
 
-6. **访问应用**30023002
+6. **访问应用**
 打开浏览器访问 [http://localhost:3000](http://localhost:3000)
 
 ### 使用 Docker 部署
@@ -2162,7 +2162,7 @@ AI_MODEL=dall-e-3
 
 # Next.js 配置
 NEXT_TELEMETRY_DISABLED=1
-NEXTAUTH_SECRET=your_nextauth_3002et_here
+NEXTAUTH_SECRET=your_nextauth_secret_here
 NEXTAUTH_URL=http://localhost:3000
 
 # 应用配置

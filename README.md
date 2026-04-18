@@ -89,7 +89,7 @@ npm run dev
 
 6. **访问应用**
 
-打开浏览器访问 [http://localhost:3002](http://localhost:3002)
+打开浏览器访问 [http://localhost:3000](http://localhost:3000)
 
 ## 项目结构
 

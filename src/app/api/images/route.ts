@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { segmentsStore } from '@/lib/simple-db';
 
-// 获取指定段落的图片
+/**
+ * GET /api/images?segmentId=xxx
+ * 获取指定段落的图片数据（从 segment.imageUrls 字段读取）
+ */
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
@@ -13,36 +17,38 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // 这里预留了从数据库获取图片的逻辑
-    // 实际实现时，会从 StorySegment 的 imageUrls 和 imageMetadata 字段中获取图片数据
-    
-    // 模拟图片数据
-    const images = [
-      {
-        id: `img_${Date.now()}_1`,
-        segmentId,
-        url: '/api/placeholder/scene-1.jpg',
-        description: '历史场景插图',
-        type: 'scene' as const,
-        width: 800,
-        height: 600,
-        alt: '历史场景描述',
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      }
-    ];
+    const segments = await segmentsStore.load();
+    const segment = segments.find((s: any) => s.id === segmentId);
+
+    if (!segment) {
+      return NextResponse.json(
+        { error: '段落不存在' },
+        { status: 404 }
+      );
+    }
+
+    const imageUrls: string[] = segment.imageUrls || [];
+    const images = imageUrls.map((url, i) => ({
+      id: `img_${segmentId}_${i}`,
+      url,
+      description: '',
+      type: 'scene' as const,
+      width: 1024,
+      height: 1024,
+      alt: `插图 ${i + 1}`,
+    }));
 
     return NextResponse.json({
       success: true,
       segmentId,
       images,
-      totalCount: images.length
+      totalCount: images.length,
     });
   } catch (error) {
     console.error('获取图片失败:', error);
     return NextResponse.json(
-      { 
-        success: false, 
+      {
+        success: false,
         error: '获取图片失败',
         details: error instanceof Error ? error.message : '未知错误'
       },

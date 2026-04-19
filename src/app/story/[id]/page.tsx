@@ -6,6 +6,7 @@ import CharacterPanel from '@/components/CharacterPanel';
 import TimelineBar from '@/components/TimelineBar';
 import DirectorSidebar from '@/components/DirectorSidebar';
 import PacingControls from '@/components/PacingControls';
+import StoryImageDisplay from '@/components/story/StoryImageDisplay';
 import type { PacingConfig, Character, StorySegment, StoryBranch } from '@/types/story';
 
 interface Story {
@@ -55,6 +56,8 @@ export default function StoryDetailPage({ params }: { params: { id: string } }) 
   const [lineStep, setLineStep] = useState(0);
   const readerRef = useRef<ReadableStreamDefaultReader<Uint8Array> | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  // P6-2: 图片生成状态
+  const [regeneratingImageForSeg, setRegeneratingImageForSeg] = useState<string | null>(null);
 
   const loadBranchSegments = useCallback(async (branchId: string) => {
     const segRes = await fetch(`/api/stories/${id}/segments?branchId=${branchId}`);
@@ -196,6 +199,25 @@ export default function StoryDetailPage({ params }: { params: { id: string } }) 
     } finally {
       setContinuing(false);
       readerRef.current = null;
+    }
+  };
+
+  // P6-2: 重新生成段落图片
+  const handleRegenerateImages = async (segmentId: string, content: string) => {
+    setRegeneratingImageForSeg(segmentId);
+    try {
+      const res = await fetch('/api/images/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ segmentId, segmentContent: content }),
+      });
+      if (!res.ok) throw new Error('图片生成失败');
+      // 刷新段落列表以获取更新后的 imageUrls
+      await loadBranchSegments(currentBranchId);
+    } catch (e) {
+      alert('图片生成失败: ' + (e instanceof Error ? e.message : '请重试'));
+    } finally {
+      setRegeneratingImageForSeg(null);
     }
   };
 
@@ -595,6 +617,19 @@ export default function StoryDetailPage({ params }: { params: { id: string } }) 
                         )}
                         <p className="prose-chinese text-[var(--ink)]">{seg.content}</p>
 
+                        {/* P6-2: 段落插图 */}
+                        <div className="mt-4">
+                          <StoryImageDisplay
+                            segmentId={seg.id}
+                            imageUrls={seg.imageUrls}
+                            onRegenerate={() => handleRegenerateImages(seg.id, seg.content)}
+                            isGenerating={regeneratingImageForSeg === seg.id}
+                            maxWidth={640}
+                            maxHeight={480}
+                            showDescription={false}
+                          />
+                        </div>
+
                         {/* C6: Segment metadata */}
                         {seg.mood && (
                           <div className="mt-2 flex items-center gap-2">
@@ -624,6 +659,16 @@ export default function StoryDetailPage({ params }: { params: { id: string } }) 
                               className="p-1.5 text-xs text-[var(--muted)] hover:text-[var(--gold)] hover:bg-[var(--gold)]/5 rounded-lg transition-all"
                               title="编辑段落"
                             >✏️</button>
+                            <button
+                              onClick={() => handleRegenerateImages(seg.id, seg.content)}
+                              disabled={regeneratingImageForSeg === seg.id}
+                              className={`p-1.5 text-xs rounded-lg transition-all ${
+                                regeneratingImageForSeg === seg.id
+                                  ? 'text-[var(--gold)] animate-pulse cursor-wait'
+                                  : 'text-[var(--muted)] hover:text-[var(--gold)] hover:bg-[var(--gold)]/5'
+                              }`}
+                              title="重新生成图片"
+                            >🖼️</button>
                             {idx > 0 && (
                               <button
                                 onClick={async () => {

@@ -3,8 +3,9 @@ import { storiesStore, segmentsStore, getOrderedChain, type StorySegment } from 
 import { buildFullPrompt } from '@/lib/prompt-builder';
 import { PacingEngine } from '@/lib/pacing-engine';
 import { consistencyChecker } from '@/lib/consistency-checker';
-import { callAI, buildOpenAIRequest } from '@/lib/ai-client';
+import { callAI, buildOpenAIRequest, aiRequestQueue } from '@/lib/ai-client';
 import { contextSummarizer } from '@/lib/context-summarizer';
+import { generateImagesForSegment } from '@/lib/image-generator';
 
 /**
  * 5.2 + 5.4 + 5.5 改造 stream-continue route
@@ -199,6 +200,32 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
           // 异步预生成新段落摘要（下次续写直接命中缓存，避免续写时同步调用 AI）
           contextSummarizer.generateSegmentSummary(newSegment, [...chain, newSegment], story?.genre)
             .catch(e => console.warn('[stream-continue] 摘要预生成失败（非致命）:', e));
+
+          // P6-2: 异步触发图片生成（低优先级队列，不阻塞主流程）
+          aiRequestQueue.enqueue(
+            async () => {
+              try {
+                const images = await generateImagesForSegment({
+                  segmentId: newSegment.id,
+                  segmentContent: fullContent,
+                });
+                if (images.length > 0) {
+                  const segs = await segmentsStore.load();
+                  const si = segs.findIndex((s: any) => s.id === newSegment.id);
+                  if (si !== -1) {
+                    segs[si].imageUrls = images.map(img => img.url);
+                    segs[si].updatedAt = new Date().toISOString();
+                    await segmentsStore.save(segs);
+                  }
+                  console.log(`[stream-continue] 图片生成完成: ${images.length} 张`);
+                }
+              } catch (e) {
+                console.warn('[stream-continue] 图片生成失败（非致命）:', e);
+              }
+              return new Response(null, { status: 200 });
+            },
+            'low'
+          ).catch(() => {});
 
           // C3: 续写后检测新内容矛盾
           try {

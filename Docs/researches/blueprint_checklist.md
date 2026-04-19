@@ -17,6 +17,19 @@
 - [x] 2.4 实现图片生成重试和降级机制（失败返回占位图，不阻塞主流程）
 - [x] 2.5 实现图片本地缓存（保存到 `public/generated-images/` 目录）
 
+## Phase 3: 集成与 UI
+- [x] 3.1 重写 `src/app/api/images/generate/route.ts` 使用真实的 `image-generator.ts`
+- [x] 3.2 在 `stream-continue` 完成后异步触发图片生成（低优先级队列）
+- [x] 3.3 图片生成完成后更新段落的 `imageUrls` 字段到数据库
+- [x] 3.4 在 `src/app/story/[id]/page.tsx` 中为每个段落集成 `StoryImageDisplay` 组件
+- [x] 3.5 添加"重新生成图片"按钮（段落操作栏）
+- [x] 3.6 添加图片加载骨架屏动画
+
+## Phase 4: 配置与测试
+- [ ] 4.1 在 `.env.local.example` 中添加图片生成相关环境变量
+- [ ] 4.2 验证 build 不报错（`npm run build`）
+- [ ] 4.3 手动测试：续写故事 → 自动生成图片 → 图片正确展示
+
 ## API 路由层
 - [x] [FILE] src/app/api/characters/[id]/route.ts
 - [x] [FILE] src/app/api/fandom-lorebook/route.ts
@@ -31,9 +44,9 @@
 - [x] [FILE] src/app/api/stories/[id]/continue/route.ts
 - [x] [FILE] src/app/api/stories/[id]/director/route.ts
 - [x] [FILE] src/app/api/stories/[id]/route.ts
-- [ ] [FILE] src/app/api/stories/[id]/segments/route.ts
-- [ ] [FILE] src/app/api/stories/[id]/stream-continue/route.ts
-- [ ] [FILE] src/app/api/stories/[id]/timeline/route.ts
+- [x] [FILE] src/app/api/stories/[id]/segments/route.ts
+- [x] [FILE] src/app/api/stories/[id]/stream-continue/route.ts
+- [x] [FILE] src/app/api/stories/[id]/timeline/route.ts
 - [ ] [FILE] src/app/api/stories/[id]/tree/route.ts
 - [ ] [FILE] src/app/api/stories/route.ts
 

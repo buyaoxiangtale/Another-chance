@@ -10,6 +10,13 @@
 - [x] 1.5 添加 rate limit 事件日志（console.warn 级别）
 - [x] 1.6 将 `callAI` 和 `callAIText` 改为使用队列+重试
 
+## Phase 2: 文生图核心功能
+- [x] 2.1 实现真实的 `src/lib/image-generator.ts`：调用 OpenAI-compatible 图片生成 API
+- [x] 2.2 实现场景描述提取器 `extractSceneDescriptions(segment)`：从段落内容提取 1-3 个场景 prompt
+- [x] 2.3 添加中国历史风格的 prompt 模板（历史写实、水墨画、工笔画、敦煌壁画风格）
+- [x] 2.4 实现图片生成重试和降级机制（失败返回占位图，不阻塞主流程）
+- [x] 2.5 实现图片本地缓存（保存到 `public/generated-images/` 目录）
+
 ## API 路由层
 - [x] [FILE] src/app/api/characters/[id]/route.ts
 - [x] [FILE] src/app/api/fandom-lorebook/route.ts
@@ -19,11 +26,11 @@
 - [x] [FILE] src/app/api/knowledge/search/route.ts
 - [x] [FILE] src/app/api/lorebook/route.ts
 - [x] [FILE] src/app/api/stories/[id]/branch/[branchId]/route.ts
-- [ ] [FILE] src/app/api/stories/[id]/branch/route.ts
-- [ ] [FILE] src/app/api/stories/[id]/characters/route.ts
-- [ ] [FILE] src/app/api/stories/[id]/continue/route.ts
-- [ ] [FILE] src/app/api/stories/[id]/director/route.ts
-- [ ] [FILE] src/app/api/stories/[id]/route.ts
+- [x] [FILE] src/app/api/stories/[id]/branch/route.ts
+- [x] [FILE] src/app/api/stories/[id]/characters/route.ts
+- [x] [FILE] src/app/api/stories/[id]/continue/route.ts
+- [x] [FILE] src/app/api/stories/[id]/director/route.ts
+- [x] [FILE] src/app/api/stories/[id]/route.ts
 - [ ] [FILE] src/app/api/stories/[id]/segments/route.ts
 - [ ] [FILE] src/app/api/stories/[id]/stream-continue/route.ts
 - [ ] [FILE] src/app/api/stories/[id]/timeline/route.ts

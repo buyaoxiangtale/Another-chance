@@ -236,10 +236,22 @@ export default function StoryDetailPage({ params }: { params: { id: string } }) 
     setRegeneratingImageForSeg(segmentId);
     try {
       const storyContent = story ? story.title + segments.slice(0, 5).map(s => s.content).join('') : '';
+      // 收集前后各2段作为上下文
+      const currentIdx = segments.findIndex(s => s.id === segmentId);
+      const prevSegs = segments.slice(Math.max(0, currentIdx - 2), currentIdx).map(s => s.content);
+      const nextSegs = segments.slice(currentIdx + 1, currentIdx + 3).map(s => s.content);
+
       const res = await fetch('/api/images/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ segmentId, segmentContent: content, style: imageStyle, storyContent }),
+        body: JSON.stringify({
+          segmentId, segmentContent: content, style: imageStyle, storyContent,
+          storyTitle: story?.title,
+          storyDescription: story?.description,
+          storyType: story?.genre,
+          previousSegments: prevSegs,
+          nextSegments: nextSegs,
+        }),
       });
       if (!res.ok) throw new Error('图片生成失败');
       // 刷新段落列表以获取更新后的 imageUrls

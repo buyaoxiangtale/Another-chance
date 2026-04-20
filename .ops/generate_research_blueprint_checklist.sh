@@ -1,121 +1,65 @@
 #!/usr/bin/env bash
-# Generate research blueprint checklist from repository tree
-# Usage: bash .ops/generate_research_blueprint_checklist.sh
+# generate_research_blueprint_checklist.sh
+# 为 gushi 项目生成研究清单
+
 set -euo pipefail
+REPO="/home/pjlab/fbh/fbh_project/gushi"
+CHECKLIST="$REPO/Docs/researches/blueprint_checklist.md"
+TMP=$(mktemp)
 
-REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-CHECKLIST="$REPO_DIR/Docs/researches/blueprint_checklist.md"
-TMPFILE=$(mktemp)
+mkdir -p "$REPO/Docs/researches"
 
-trap 'rm -f "$TMPFILE"' EXIT
-
-# Collect existing [x] marks
-declare -A DONE_MAP
+# Preserve existing [x] marks
+declare -A done_map
 if [[ -f "$CHECKLIST" ]]; then
-  while IFS= read -r line; do
-    if [[ "$line" =~ ^-\ \[x\] ]]; then
-      # Extract path after the tag
-      path=$(echo "$line" | sed 's/^- \[x\] \[DIR\] //' | sed 's/^- \[x\] \[FILE\] //')
-      DONE_MAP["$path"]=1
-    fi
-  done < "$CHECKLIST"
+  grep -oP '^\- \[x\] \[.*?\] (.+)$' "$CHECKLIST" | while read -r line; do
+    key=$(echo "$line" | sed 's/^- \[x\] \[.*\] //')
+    done_map["$key"]=1
+  done
 fi
 
-{
-  echo "# Research Blueprint Checklist"
-  echo ""
-  echo "Auto-generated: $(date -Iseconds)"
-  echo "Repository: $(basename "$REPO_DIR")"
-  echo ""
+echo "# Research Checklist — gushi 故事平台" > "$TMP"
+echo "" >> "$TMP"
+echo "研究目标：深入理解项目架构，为文生图功能集成和 API Rate Limit 优化提供全面的技术上下文。" >> "$TMP"
+echo "" >> "$TMP"
 
-  # Directories first, then files
-  echo "## Directories"
-  echo ""
+# Code-only scope: src/ only, exclude node_modules, .next, etc.
+cd "$REPO"
 
-  # Code directories to research
-  for dir in \
-    "src/app/api" \
-    "src/app/story" \
-    "src/app/create" \
-    "src/components" \
-    "src/lib" \
-    "src/types" \
-    "prisma" \
-    "scripts" \
-    "data"; do
-    full="$REPO_DIR/$dir"
-    if [[ -d "$full" ]]; then
-      rel="${dir#/}"
-      mark=" "
-      [[ -v "DONE_MAP[$rel]" ]] && mark="x"
-      echo "- [$mark] [DIR] $rel"
-    fi
-  done
+echo "## API 路由层" >> "$TMP"
+find src/app/api -type f -name "*.ts" | sort | while read -r f; do
+  rel="src/${f#src/}"
+  mark=" "
+  [[ -f "$REPO/Docs/researches/${rel//\//_}_research.md" ]] && mark="x"
+  echo "- [$mark] [FILE] $rel" >> "$TMP"
+done
 
-  echo ""
-  echo "## Files"
-  echo ""
+echo "" >> "$TMP"
+echo "## 核心库 (lib/)" >> "$TMP"
+find src/lib -type f -name "*.ts" | sort | while read -r f; do
+  rel="src/${f#src/}"
+  mark=" "
+  [[ -f "$REPO/Docs/researches/${rel//\//_}_research.md" ]] && mark="x"
+  echo "- [$mark] [FILE] $rel" >> "$TMP"
+done
 
-  # Key config files
-  for f in \
-    "prisma/schema.prisma" \
-    "src/types/story.ts" \
-    "src/lib/simple-db.ts" \
-    "package.json" \
-    "next.config.mjs" \
-    "tailwind.config.ts" \
-    "tsconfig.json" \
-    ".env.example" \
-    "capacitor.config.json" \
-    "docker-compose.yml" \
-    "Dockerfile" \
-    "seed.js"; do
-    full="$REPO_DIR/$f"
-    if [[ -f "$full" ]]; then
-      mark=" "
-      [[ -v "DONE_MAP[$f]" ]] && mark="x"
-      echo "- [$mark] [FILE] $f"
-    fi
-  done
+echo "" >> "$TMP"
+echo "## 组件层" >> "$TMP"
+find src/components -type f \( -name "*.tsx" -o -name "*.ts" \) | sort | while read -r f; do
+  rel="src/${f#src/}"
+  mark=" "
+  [[ -f "$REPO/Docs/researches/${rel//\//_}_research.md" ]] && mark="x"
+  echo "- [$mark] [FILE] $rel" >> "$TMP"
+done
 
-  # API route files
-  echo ""
-  echo "## API Routes"
-  echo ""
+echo "" >> "$TMP"
+echo "## 类型定义" >> "$TMP"
+find src/types -type f -name "*.ts" | sort | while read -r f; do
+  rel="src/${f#src/}"
+  mark=" "
+  [[ -f "$REPO/Docs/researches/${rel//\//_}_research.md" ]] && mark="x"
+  echo "- [$mark] [FILE] $rel" >> "$TMP"
+done
 
-  for f in $(find "$REPO_DIR/src/app/api" -name "route.ts" -o -name "route.js" 2>/dev/null | sort); do
-    rel="${f#$REPO_DIR/}"
-    mark=" "
-    [[ -v "DONE_MAP[$rel]" ]] && mark="x"
-    echo "- [$mark] [FILE] $rel"
-  done
-
-  # Component files
-  echo ""
-  echo "## Components"
-  echo ""
-
-  for f in $(find "$REPO_DIR/src/components" -name "*.tsx" -o -name "*.ts" 2>/dev/null | sort); do
-    rel="${f#$REPO_DIR/}"
-    mark=" "
-    [[ -v "DONE_MAP[$rel]" ]] && mark="x"
-    echo "- [$mark] [FILE] $rel"
-  done
-
-  # Page files
-  echo ""
-  echo "## Pages"
-  echo ""
-
-  for f in $(find "$REPO_DIR/src/app" -maxdepth 3 -name "page.tsx" -o -name "layout.tsx" 2>/dev/null | sort); do
-    rel="${f#$REPO_DIR/}"
-    mark=" "
-    [[ -v "DONE_MAP[$rel]" ]] && mark="x"
-    echo "- [$mark] [FILE] $rel"
-  done
-
-} > "$TMPFILE"
-
-mv "$TMPFILE" "$CHECKLIST"
-echo "✅ Checklist generated: $CHECKLIST"
-echo "   Items: $(grep -c '^\- \[' "$CHECKLIST")"
+mv "$TMP" "$CHECKLIST"
+echo "✅ Checklist generated: $CHECKLIST ($(grep -c '^\- \[ \]' "$CHECKLIST") pending)"

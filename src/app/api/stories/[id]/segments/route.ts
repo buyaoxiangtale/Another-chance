@@ -51,7 +51,7 @@ export async function PATCH(
     const { searchParams } = new URL(request.url);
     const segmentId = searchParams.get('segmentId');
     const body = await request.json();
-    const { content, title, mood, narrativePace } = body;
+    const { content, title, mood, narrativePace, imageUrls } = body;
 
     if (!segmentId) {
       return NextResponse.json({ error: '缺少 segmentId 参数' }, { status: 400 });

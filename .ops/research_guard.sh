@@ -1,153 +1,87 @@
-#!/usr/bin/env bash
-# Research guard — uses OpenClaw subagent for research (no proxy needed)
-# Usage: bash .ops/research_guard.sh
+#!/bin/bash
+# research_guard.sh — 研究 cron 守护进程 (Claude Code)
 set -euo pipefail
+export PATH="/home/pjlab/.local/bin:$PATH"
 
-REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-CHECKLIST="$REPO_DIR/Docs/researches/blueprint_checklist.md"
-CLAIMS_DIR="$REPO_DIR/.cron/research_claims"
-STATE_FILE="$REPO_DIR/.cron/research_guard.state"
-LOG_FILE="$REPO_DIR/.cron/research_guard.log"
-RESEARCH_DIR="$REPO_DIR/Docs/researches"
+REPO="/home/pjlab/fbh/fbh_project/gushi"
+STATE="$REPO/.cron/research_guard.state"
+LOG="$REPO/.cron/research_guard.log"
+CLAIM_DIR="$REPO/.cron/research_claims"
+CHECKLIST="$REPO/Docs/researches/blueprint_checklist.md"
+RESEARCH_DIR="$REPO/Docs/researches"
 
-MAX_BATCH=3
-AUTO_CLEANUP="${AUTO_CLEANUP_ON_COMPLETE:-1}"
+export https_proxy=http://127.0.0.1:7897
+export http_proxy=http://127.0.0.1:7897
+mkdir -p "$CLAIM_DIR" "$RESEARCH_DIR"
 
-mkdir -p "$CLAIMS_DIR"
+log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" | tee -a "$LOG"; }
 
-log() { echo "[$(date '+%H:%M:%S')] $*" >> "$LOG_FILE"; echo "$*"; }
+# Lock to prevent concurrent guards
+LOCK="$REPO/.cron/research_guard.lock"
+exec 200>"$LOCK"
+flock -n 200 || { log "Another guard running, exiting"; exit 0; }
 
-pending_count() {
-  grep -c '^\- \[ \]' "$CHECKLIST" 2>/dev/null || echo 0
-}
-
-# If completed
-if [[ "$(pending_count)" -eq 0 && -f "$STATE_FILE" ]]; then
-  current=$(cat "$STATE_FILE")
-  if [[ "$current" != "completed" ]]; then
-    log "✅ All items researched. Setting completed."
-    echo "completed" > "$STATE_FILE"
-  fi
-  echo "completed"
+# Count pending items
+PENDING=$(grep -c '^\- \[ \]' "$CHECKLIST" 2>/dev/null || true)
+if [[ "$PENDING" -eq 0 ]]; then
+  log "All items researched, done."
+  echo "completed" > "$STATE"
   exit 0
 fi
 
-# Check if another guard is already running (lock file)
-LOCK_FILE="$REPO_DIR/.cron/research_guard.pid"
-if [[ -f "$LOCK_FILE" ]]; then
-  old_pid=$(cat "$LOCK_FILE")
-  if kill -0 "$old_pid" 2>/dev/null; then
-    log "⏭️  Another guard already running (pid $old_pid). Exiting."
+# Claim next pending item
+ITEM=$(grep '^\- \[ \]' "$CHECKLIST" | head -1)
+if [[ -z "$ITEM" ]]; then
+  log "No pending items found"
+  exit 0
+fi
+
+# Extract path from item
+ITEM_PATH=$(echo "$ITEM" | sed 's/^- \[ \] \[.*\] //')
+CLAIM_FILE="$CLAIM_DIR/$(echo "$ITEM_PATH" | tr '/' '_' | sed 's/\.tsx\?$//').claim"
+
+# Skip if already claimed and in progress
+if [[ -f "$CLAIM_FILE" ]]; then
+  CLAIM_AGE=$(( $(date +%s) - $(stat -c %Y "$CLAIM_FILE" 2>/dev/null || echo 0) ))
+  if [[ "$CLAIM_AGE" -lt 600 ]]; then
+    log "Item already claimed (age ${CLAIM_AGE}s): $ITEM_PATH"
     exit 0
   fi
 fi
-echo $$ > "$LOCK_FILE"
-trap 'rm -f "$LOCK_FILE"' EXIT
 
-claim_item() {
-  local entry="$1"
-  local claim_id=$(echo "$entry" | md5sum | cut -c1-12)
-  local claim_file="$CLAIMS_DIR/${claim_id}.claim"
-  [[ -f "$claim_file" ]] && return 1
-  echo "{\"entry\": \"$entry\", \"started_at\": \"$(date -Iseconds)\"}" > "$claim_file"
-  echo "$claim_id"
-}
+# Claim the item
+echo "$(date +%s)" > "$CLAIM_FILE"
+log "Claimed: $ITEM_PATH"
 
-extract_path() {
-  echo "$1" | sed 's/^- \[.\] \[DIR\] //' | sed 's/^- \[.\] \[FILE\] //'
-}
+RESEARCH_FILE="$RESEARCH_DIR/${ITEM_PATH//\//_}_research.md"
 
-extract_type() {
-  if echo "$1" | grep -q '\[DIR\]'; then echo "dir"; else echo "file"; fi
-}
+# Run Claude Code research
+cd "$REPO"
 
-run_research() {
-  local path="$1"
-  local type="$2"
-  local full_path="$REPO_DIR/$path"
-  local safe_name=$(echo "$path" | tr '/' '_')
-  local output_file="$RESEARCH_DIR/${safe_name}_research.md"
+/home/pjlab/.local/bin/claude -p --dangerously-skip-permissions \
+  "研究文件 $ITEM_PATH 在 gushi 故事平台项目中的作用。重点关注：
+1. 文件的核心功能和职责
+2. 与图片生成功能的潜在集成点
+3. AI API 调用位置和 rate limit 风险点
+4. 对外暴露的接口和数据结构
 
-  log "🔍 Researching: $path ($type)"
+用中文输出研究结果。" \
+  > "$RESEARCH_FILE" 2>> "$LOG" || {
+    log "claude failed for $ITEM_PATH (exit $?), skipping"
+    rm -f "$CLAIM_FILE"
+    exit 0
+  }
 
-  local prompt
-  if [[ "$type" == "dir" ]]; then
-    prompt="研究项目 $REPO_DIR 中 $path/ 目录下的所有源文件。对每个文件：描述用途、导出、依赖关系。然后给出该目录的架构概览。最后指出 ChronosMirror 升级需要改进的地方（角色建模、时间轴校验、MCP 维基百科集成、节奏控制）。用中文写，详细具体，引用实际的函数名和类型定义。最后把完整报告写入文件 $output_file"
-  else
-    prompt="研究项目 $REPO_DIR 中的文件 $path。详细描述：1) 用途和架构角色 2) 所有导出（函数、类型、常量）3) 核心逻辑和数据流 4) 依赖关系 5) ChronosMirror 升级需要改进的地方（角色建模、时间轴校验、MCP 维基百科集成、节奏控制）。用中文写，详细具体，引用实际的函数名、类型定义和行号。最后把完整报告写入文件 $output_file"
-  fi
-
-  # Use openclaw subagent (runs locally, no proxy needed)
-  local result
-  result=$(openclaw agent --local --message "$prompt" --json 2>&1) || true
-
-  if [[ -f "$output_file" && $(wc -c < "$output_file") -gt 500 ]]; then
-    log "✅ Output: $output_file ($(wc -c < "$output_file") bytes)"
-    return 0
-  else
-    log "❌ Output missing or too small for $path"
-    # Write what we got for debugging
-    echo "$result" > "${output_file}.debug" 2>/dev/null || true
-    return 1
-  fi
-}
-
-mark_done() {
-  local line_num="$1"
-  local tmp=$(mktemp)
-  awk -v n="$line_num" 'NR==n { sub(/\[ \]/, "[x]") } { print }' "$CHECKLIST" > "$tmp"
-  mv "$tmp" "$CHECKLIST"
-}
-
-# Main
-echo "running" > "$STATE_FILE"
-log "=== Research guard started (subagent mode) ==="
-
-BATCH=0
-while [[ $BATCH -lt $MAX_BATCH ]]; do
-  PENDING=$(pending_count)
-  [[ "$PENDING" -eq 0 ]] && { log "🎉 No pending items remaining."; break; }
-
-  line_num=0
-  entry=""
-  while IFS= read -r line; do
-    line_num=$((line_num + 1))
-    if [[ "$line" =~ ^-\ \[\ \] ]]; then
-      entry="$line"
-      break
-    fi
-  done < "$CHECKLIST"
-
-  [[ -z "$entry" ]] && break
-
-  path=$(extract_path "$entry")
-  type=$(extract_type "$entry")
-
-  claim_id=$(claim_item "$entry" 2>/dev/null || true)
-  if [[ -z "$claim_id" ]]; then
-    log "⏭️  Skipping (already claimed): $path"
-    continue
-  fi
-
-  if run_research "$path" "$type"; then
-    mark_done "$line_num"
-    log "✅ Completed: $path"
-  else
-    rm -f "$CLAIMS_DIR/${claim_id}.claim" 2>/dev/null || true
-    log "❌ Failed: $path (will retry next cycle)"
-  fi
-
-  BATCH=$((BATCH + 1))
-done
-
-FINAL_PENDING=$(pending_count)
-log "=== Batch done. Remaining: $FINAL_PENDING ==="
-
-if [[ "$FINAL_PENDING" -eq 0 ]]; then
-  echo "completed" > "$STATE_FILE"
-  log "✅ All research complete!"
-  # Regenerate final todo
-  bash "$REPO_DIR/.ops/generate_daily_research_todo.sh" >> "$LOG_FILE" 2>&1 || true
+# Verify output is non-empty
+if [[ -s "$RESEARCH_FILE" ]]; then
+  ESCAPED_PATH=$(printf '%s\n' "$ITEM_PATH" | sed 's/[[\.*^$()+?{|\\]/\\&/g')
+  sed -i "s|^\\- \\[ \\] \\(\\[.*\\] $ESCAPED_PATH\\)|- [x] \\1|" "$CHECKLIST"
+  log "✅ Completed: $ITEM_PATH"
+  rm -f "$CLAIM_FILE"
 else
-  echo "idle_waiting" > "$STATE_FILE"
+  log "⚠️ Empty output for $ITEM_PATH, keeping claim"
 fi
+
+REMAINING=$(grep -c '^\- \[ \]' "$CHECKLIST" 2>/dev/null || true)
+echo "running" > "$STATE"
+log "Remaining: $REMAINING items"

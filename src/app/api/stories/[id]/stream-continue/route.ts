@@ -6,8 +6,9 @@ import { getOrderedChain } from '@/lib/chain-helpers';
 import { buildFullPrompt } from '@/lib/prompt-builder';
 import { PacingEngine } from '@/lib/pacing-engine';
 import { consistencyChecker } from '@/lib/consistency-checker';
-import { callAI, buildOpenAIRequest } from '@/lib/ai-client';
+import { callAI, buildOpenAIRequest, aiRequestQueue } from '@/lib/ai-client';
 import { contextSummarizer } from '@/lib/context-summarizer';
+import { generateImagesForSegment } from '@/lib/image-generator';
 
 export async function POST(
   request: NextRequest,

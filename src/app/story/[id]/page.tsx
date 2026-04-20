@@ -687,6 +687,7 @@ export default function StoryDetailPage({ params }: { params: { id: string } }) 
                           <StoryImageDisplay
                             segmentId={seg.id}
                             imageUrls={seg.imageUrls}
+                            imagePrompts={seg.imagePrompts}
                             onRegenerate={() => handleRegenerateImages(seg.id, seg.content)}
                             isGenerating={regeneratingImageForSeg === seg.id}
                             maxWidth={640}

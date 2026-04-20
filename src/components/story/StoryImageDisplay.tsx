@@ -7,6 +7,7 @@ interface ImageMetadata {
   id: string;
   url: string;
   description?: string;
+  prompt?: string;
   type: 'illustration' | 'scene' | 'character' | 'object';
   width: number;
   height: number;
@@ -21,6 +22,8 @@ interface StoryImageDisplayProps {
   showDescription?: boolean;
   /** 直接传入图片 URL 列表（避免额外 API 请求） */
   imageUrls?: string[];
+  /** 每张图对应的生成 prompt */
+  imagePrompts?: string[];
   /** 重新生成图片回调 */
   onRegenerate?: () => void;
   /** 是否正在生成图片（显示骨架屏） */
@@ -85,6 +88,7 @@ export default function StoryImageDisplay({
   maxHeight = 600,
   showDescription = true,
   imageUrls,
+  imagePrompts,
   onRegenerate,
   isGenerating = false,
 }: StoryImageDisplayProps) {
@@ -101,6 +105,7 @@ export default function StoryImageDisplay({
         id: `img_${segmentId}_${i}`,
         url,
         description: '',
+        prompt: imagePrompts?.[i] || '',
         type: 'scene' as const,
         width: 1024,
         height: 1024,
@@ -263,6 +268,13 @@ export default function StoryImageDisplay({
               <div className="p-2 bg-gray-50">
                 <p className="text-xs text-gray-600">{image.description}</p>
               </div>
+            )}
+            {/* Prompt 描述（可折叠） */}
+            {image.prompt && (
+              <details className="px-2 pb-2 bg-gray-50/50">
+                <summary className="text-[10px] text-gray-400 cursor-pointer hover:text-gray-600 transition-colors">📝 生成 Prompt</summary>
+                <p className="text-[11px] text-gray-500 mt-1 leading-relaxed">{image.prompt}</p>
+              </details>
             )}
           </div>
         );

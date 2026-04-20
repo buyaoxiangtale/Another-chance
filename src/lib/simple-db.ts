@@ -60,6 +60,8 @@ interface StorySegment {
   branchId: string;
   parentSegmentId?: string;
   imageUrls: string[];
+  imagePrompts?: string[]; // 每张图对应的生成 prompt
+  imageStyle?: string;     // 生成时使用的画风
   // C1: 1.5 扩展
   timeline?: any;
   characterIds?: string[];

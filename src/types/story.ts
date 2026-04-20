@@ -94,6 +94,8 @@ export type StorySegment = {
   branchId: string;
   parentSegmentId?: string;
   imageUrls: string[];
+  imagePrompts?: string[];
+  imageStyle?: string;
   // C1: 1.5 扩展
   timeline?: TimelineEvent;
   characterIds?: string[];
@@ -178,6 +180,8 @@ class StorySegmentClass {
   branchId!: string;
   parentSegmentId!: string;
   imageUrls!: string[];
+  imagePrompts?: string[];
+  imageStyle?: string;
   timeline?: TimelineEvent;
   characterIds?: string[];
   historicalReferences?: HistoricalReference[];

@@ -15,8 +15,7 @@ import { contextSummarizer, estimateTokens } from './context-summarizer';
 import { EventTracker, buildEventPrompt } from './event-tracker';
 import { branchMemory } from './branch-memory';
 import type { PacingConfig, DirectorState, StorySegment } from '@/types/story';
-import { storiesStore } from './simple-db';
-import { summariesStore } from './simple-db';
+import prisma from '@/lib/prisma';
 import { INFER_PATTERNS, FICTION_KEYWORDS } from './genre-config';
 
 export interface BuildPromptOptions {
@@ -119,8 +118,8 @@ export async function buildFullPrompt(options: BuildPromptOptions): Promise<stri
   const parts: string[] = [];
   const _fandomForbiddenItems: string[] = [];
 
-  const story = (await storiesStore.load()).find((s: any) => s.id === storyId);
-  const rawGenre = (story as any)?.genre || '';
+  const story = await prisma.story.findUnique({ where: { id: storyId } });
+  const rawGenre = story?.genre || '';
   const description = (story as any)?.description || storyDescription || '';
 
   // 从 description 自动推断 genre（如果用户没填）
@@ -250,10 +249,10 @@ export async function buildFullPrompt(options: BuildPromptOptions): Promise<stri
     if (directorOverrides) {
       const dm = await directorManager.getOrCreate(storyId);
       if (directorOverrides.characterStates) {
-        dm.characterStates = { ...dm.characterStates, ...directorOverrides.characterStates };
+        dm.characterStates = { ...(dm.characterStates as Record<string, any>), ...directorOverrides.characterStates };
       }
       if (directorOverrides.worldVariables) {
-        dm.worldVariables = { ...dm.worldVariables, ...directorOverrides.worldVariables };
+        dm.worldVariables = { ...(dm.worldVariables as Record<string, any>), ...directorOverrides.worldVariables };
       }
       if (directorOverrides.activeConstraints) {
         dm.activeConstraints = directorOverrides.activeConstraints;
@@ -269,7 +268,7 @@ export async function buildFullPrompt(options: BuildPromptOptions): Promise<stri
   let contextText = '';
   if (chain.length > 0) {
     try {
-      contextText = await contextSummarizer.getContextForPrompt(chain, budgets.contextHistory);
+      contextText = await contextSummarizer.getContextForPrompt(chain as any, budgets.contextHistory);
     } catch {
       contextText = chain.map(s =>
         `${s.title ? `【${s.title}】` : ''}${s.content}`
@@ -345,13 +344,16 @@ export async function buildFullPrompt(options: BuildPromptOptions): Promise<stri
   // 从缓存摘要提取未闭合悬念
   let foreshadowingList: string[] = [];
   try {
-    const all = await summariesStore.load();
-    const recentSummaries = all
-      .filter((s: any) => s.storyId === storyId && s.branchId === branchId)
-      .slice(-5);
+    const recentSummaries = await prisma.segmentSummary.findMany({
+      where: { storyId, branchId },
+      orderBy: { createdAt: 'desc' },
+      take: 5,
+    });
     for (const summary of recentSummaries) {
-      if (summary.foreshadowing && Array.isArray(summary.foreshadowing)) {
-        foreshadowingList.push(...summary.foreshadowing);
+      const meta = summary.metadata as Record<string, any> | null;
+      const foreshadowing = meta?.foreshadowing;
+      if (foreshadowing && Array.isArray(foreshadowing)) {
+        foreshadowingList.push(...foreshadowing);
       }
     }
     foreshadowingList = [...new Set(foreshadowingList)];

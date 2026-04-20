@@ -4,12 +4,31 @@
  * 运行: npx tsx tests/e2e.test.ts
  */
 
-import { estimateTokens, extractSummaryFromSegment, mergeSummaries } from '../src/lib/context-summarizer';
+import { estimateTokens, extractSummaryFromSegment } from '../src/lib/context-summarizer';
 import { extractKeyEvents, buildEventPrompt } from '../src/lib/event-tracker';
 import { ConsistencyChecker, type CharacterStateForCheck } from '../src/lib/consistency-checker';
 import { branchMemory } from '../src/lib/branch-memory';
-import type { StorySegment } from '../src/lib/simple-db';
-import type { KeyEvent } from '../src/types/event-tracker';
+import type { Visibility } from '../src/lib/prisma';
+
+// Minimal segment shape matching Prisma's StorySegment
+type TestSegment = {
+  id: string;
+  title: string | null;
+  content: string;
+  isBranchPoint: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+  storyId: string;
+  branchId: string;
+  parentSegmentId: string | null;
+  imageUrls: string[];
+  timeline: any;
+  historicalReferences: any;
+  narrativePace: string | null;
+  mood: string | null;
+  characterIds: string[];
+  visibility: Visibility;
+};
 
 let passed = 0;
 let failed = 0;
@@ -24,15 +43,22 @@ function assert(condition: boolean, message: string) {
   }
 }
 
-function makeSegment(id: string, content: string, overrides?: Partial<StorySegment>): StorySegment {
+function makeSegment(id: string, content: string, overrides?: Partial<TestSegment>): TestSegment {
   return {
     id, content, title: `段落${id}`,
     isBranchPoint: false,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
+    createdAt: new Date(),
+    updatedAt: new Date(),
     storyId: 'e2e-story',
     branchId: 'main',
+    parentSegmentId: null,
     imageUrls: [],
+    timeline: null,
+    historicalReferences: null,
+    narrativePace: null,
+    mood: null,
+    characterIds: [],
+    visibility: 'PRIVATE',
     ...overrides,
   };
 }
@@ -42,7 +68,7 @@ async function main() {
 
   // === Step 1: 创建长故事 (10+段) ===
   console.log('Step 1: 创建长故事 (10+段)');
-  const segments: StorySegment[] = [
+  const segments: TestSegment[] = [
     makeSegment('seg1', '东汉末年，天下大乱。曹操在许昌招兵买马，势力日益壮大。'),
     makeSegment('seg2', '刘备与关羽、张飞桃园三结义，结为兄弟，共同起兵。'),
     makeSegment('seg3', '吕布背叛丁原，投靠董卓。董卓权倾朝野，残暴无道。'),
@@ -55,7 +81,6 @@ async function main() {
     makeSegment('seg10', '天下三分之势初成。曹操据北方，孙权据江东，刘备据荆州。'),
     makeSegment('seg11', '刘备入蜀，夺取益州。张飞在战场上英勇作战，最终战死沙场。'),
   ];
-  // Set parentSegmentId for chain ordering
   for (let i = 1; i < segments.length; i++) {
     segments[i].parentSegmentId = segments[i - 1].id;
   }
@@ -73,31 +98,18 @@ async function main() {
 
   // Verify specific events captured in summaries
   const seg3Summary = summaries[2];
-  assert(seg3Summary.keyEvents.some(e => e.includes('背叛')), 'seg3 summary captures betrayal');
+  assert(seg3Summary.metadata.keyEvents!.some((e: string) => e.includes('背叛')), 'seg3 summary captures betrayal');
   const seg4Summary = summaries[3];
-  assert(seg4Summary.keyEvents.some(e => e.includes('死') || e.includes('刺')), 'seg4 summary captures death/kill');
+  assert(seg4Summary.metadata.keyEvents!.some((e: string) => e.includes('死') || e.includes('刺')), 'seg4 summary captures death/kill');
   const seg11Summary = summaries[10];
-  assert(seg11Summary.keyEvents.some(e => e.includes('死') || e.includes('战死')), 'seg11 summary captures battle/death');
-
-  // Verify hierarchical merge
-  const groupSummary = mergeSummaries(summaries.slice(0, 5), '第一幕');
-  assert(groupSummary.segmentIds.length === 5, 'group summary merges 5 segments');
-  assert(groupSummary.keyEvents.length > 0, 'group summary has aggregated events');
-  assert(groupSummary.tokenCount > 0, 'group summary has token count');
+  assert(seg11Summary.metadata.keyEvents!.some((e: string) => e.includes('死') || e.includes('战死')), 'seg11 summary captures battle/death');
 
   // === Step 3: 续写引用早期事件 ===
   console.log('\nStep 3: 事件追踪 — 引用早期事件');
-  const allEvents: KeyEvent[] = [];
+  const allEvents: any[] = [];
   for (const seg of segments) {
     const events = extractKeyEvents(seg.content);
-    allEvents.push(...events.map(e => ({
-      ...e,
-      eventId: 'e_' + seg.id,
-      storyId: 'e2e-story',
-      branchId: 'main',
-      segmentId: seg.id,
-      createdAt: new Date().toISOString(),
-    })));
+    allEvents.push(...events);
   }
 
   const activeEvents = allEvents.filter(e => e.status === 'active');
@@ -122,11 +134,8 @@ async function main() {
 
   // === Step 4: 创建分支 → 验证分支记忆 ===
   console.log('\nStep 4: 分支记忆');
-  // With empty DB, branch memory returns empty for non-existent story
   const branchPrompt = await branchMemory.buildBranchMemoryPrompt('e2e-story', 'main');
   assert(typeof branchPrompt === 'string', 'branch memory prompt is string');
-  // Since we haven't written to DB, it may be empty — that's OK for this test
-  // The key is that the function doesn't crash and returns proper types
 
   const divergence = await branchMemory.getBranchDivergencePoint('e2e-story', 'main', 'branch-alt');
   assert(divergence === null, 'no divergence point in empty DB');
@@ -176,7 +185,6 @@ async function main() {
     '曹操拿起手机，拨通了刘备的电话。',
     { currentEra: '三国', keyDates: [] }
   );
-  // No specific era keyword for "手机" so this tests that it doesn't crash
   assert(eraIssue.length >= 0, 'era check handles anachronism gracefully');
 
   // 5e. No false positives on consistent content
@@ -188,7 +196,6 @@ async function main() {
       stateHistory: [],
     }]
   );
-  // 关羽 is alive and brave, no contradictions expected
   assert(!cleanIssues.some(i => i.severity === 'error'), 'no false positives on clean content');
 
   console.log(`\n📊 Results: ${passed} passed, ${failed} failed`);

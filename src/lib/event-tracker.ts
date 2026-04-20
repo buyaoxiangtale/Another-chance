@@ -3,23 +3,18 @@
  * 从段落内容中提取和追踪关键事件
  */
 
-import { segmentsStore, getOrderedChain, type StorySegment } from './simple-db';
-import type { KeyEvent, EventType } from '@/types/event-tracker';
-
-const EVENTS_FILE = 'events.json';
-
-// Reuse SimpleStore pattern
-import { SimpleStore } from './simple-db';
-const eventsStore = new SimpleStore<KeyEvent>(EVENTS_FILE);
+import { getOrderedChain } from '@/lib/chain-helpers';
+import prisma from '@/lib/prisma';
+import type { EventType } from '@/types/event-tracker';
 
 function genId(): string {
   return 'evt_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 }
 
 /**
- * 事件关键词映射：事件类型 → 匹配规则
+ * 事件关键词映射
  */
-const EVENT_PATTERNS: { type: EventType; patterns: RegExp[]; importance: KeyEvent['importance'] }[] = [
+const EVENT_PATTERNS: { type: EventType; patterns: RegExp[]; importance: string }[] = [
   { type: 'death', patterns: [/(?:阵亡|身亡|战死|去世|死亡|丧命|遇害|陨落|气绝|断气)/, /(?:杀死|击杀|斩杀|赐死|处死|毒死|刺死)/], importance: 'critical' },
   { type: 'alliance', patterns: [/(?:结盟|联盟|联手|合作|归顺|投靠|结为兄弟|歃血为盟)/], importance: 'major' },
   { type: 'betrayal', patterns: [/(?:背叛|出卖|反叛|倒戈|叛变|背弃|投敌)/], importance: 'critical' },
@@ -34,23 +29,33 @@ const EVENT_PATTERNS: { type: EventType; patterns: RegExp[]; importance: KeyEven
 ];
 
 /**
- * C2.2: 从段落内容中提取关键事件（规则提取）
+ * C2.2: 从段落内容中提取关键事件
  */
 export function extractKeyEvents(
   content: string,
   characterIds: string[] = []
-): Omit<KeyEvent, 'eventId' | 'storyId' | 'branchId' | 'segmentId' | 'createdAt' | 'resolvedAt' | 'resolvedBySegmentId'>[] {
-  const events: Omit<KeyEvent, 'eventId' | 'storyId' | 'branchId' | 'segmentId' | 'createdAt' | 'resolvedAt' | 'resolvedBySegmentId'>[] = [];
+): Array<{
+  type: EventType;
+  description: string;
+  involvedCharacterIds: string[];
+  status: string;
+  importance: string;
+}> {
+  const events: Array<{
+    type: EventType;
+    description: string;
+    involvedCharacterIds: string[];
+    status: string;
+    importance: string;
+  }> = [];
   const sentences = content.split(/[。！？\n]+/).filter(s => s.trim().length > 0);
 
   for (const { type, patterns, importance } of EVENT_PATTERNS) {
     for (const pattern of patterns) {
       for (const sentence of sentences) {
         if (pattern.test(sentence)) {
-          // 避免重复：同一句子同一类型只记录一次
           const already = events.some(e => e.type === type && sentence.includes(e.description.slice(0, 10)));
           if (!already) {
-            // 清理句子
             const desc = sentence.trim().replace(/^[，、\s]+/, '');
             events.push({
               type,
@@ -60,7 +65,7 @@ export function extractKeyEvents(
               importance,
             });
           }
-          pattern.lastIndex = 0; // reset regex
+          pattern.lastIndex = 0;
         }
       }
     }
@@ -73,107 +78,99 @@ export function extractKeyEvents(
  * C2.1: EventTracker 类
  */
 export class EventTracker {
-  /**
-   * 为新段落提取并存储关键事件
-   */
-  async processSegment(storyId: string, branchId: string, segment: StorySegment): Promise<KeyEvent[]> {
+  async processSegment(storyId: string, branchId: string, segment: any): Promise<any[]> {
     const extracted = extractKeyEvents(segment.content, segment.characterIds || []);
-    const now = new Date().toISOString();
 
-    const events: KeyEvent[] = extracted.map(e => ({
-      ...e,
-      eventId: genId(),
-      storyId,
-      branchId,
-      segmentId: segment.id,
-      createdAt: now,
-    }));
+    const events: any[] = [];
 
-    if (events.length > 0) {
-      const all = await eventsStore.load();
-      all.push(...events);
-      await eventsStore.save(all);
+    for (const e of extracted) {
+      const event = await prisma.keyEvent.create({
+        data: {
+          id: genId(),
+          storyId,
+          branchId,
+          segmentId: segment.id,
+          eventType: e.type,
+          description: e.description,
+          involvedCharacterIds: e.involvedCharacterIds || [],
+          status: 'active',
+          importance: e.importance,
+        },
+      });
+      events.push(event);
     }
 
     return events;
   }
 
-  /**
-   * C2.3: 获取当前活跃事件（未解决的冲突、进行中的情节线）
-   */
-  async getActiveEvents(storyId: string, branchId: string, currentSegmentId?: string): Promise<KeyEvent[]> {
-    const all = await eventsStore.load();
-    let active = all.filter(e => e.storyId === storyId && e.branchId === branchId && e.status === 'active');
+  async getActiveEvents(storyId: string, branchId: string, currentSegmentId?: string): Promise<any[]> {
+    let active = await prisma.keyEvent.findMany({
+      where: { storyId, branchId, status: 'active' },
+    });
 
     if (currentSegmentId) {
-      // 只返回当前段落之前的事件
       const chain = await getOrderedChain(storyId, branchId);
       const currentIdx = chain.findIndex(s => s.id === currentSegmentId);
       if (currentIdx >= 0) {
         const chainSegmentIds = new Set(chain.slice(0, currentIdx).map(s => s.id));
-        active = active.filter(e => chainSegmentIds.has(e.segmentId));
+        active = active.filter(e => e.segmentId && chainSegmentIds.has(e.segmentId));
       }
     }
 
-    // 按重要性排序：critical > major > minor，同级别按时间倒序
     const importanceOrder: Record<string, number> = { critical: 0, major: 1, minor: 2 };
     active.sort((a, b) => {
-      const impDiff = importanceOrder[a.importance] - importanceOrder[b.importance];
-      return impDiff !== 0 ? impDiff : b.createdAt.localeCompare(a.createdAt);
+      const impDiff = importanceOrder[a.importance as string] - importanceOrder[b.importance as string];
+      return impDiff !== 0 ? impDiff : b.createdAt.getTime() - a.createdAt.getTime();
     });
 
     return active;
   }
 
-  /**
-   * C2.4: 获取已解决的事件
-   */
-  async getResolvedEvents(storyId: string, branchId: string, beforeSegmentId?: string): Promise<KeyEvent[]> {
-    const all = await eventsStore.load();
-    let resolved = all.filter(e => e.storyId === storyId && e.branchId === branchId && e.status === 'resolved');
+  async getResolvedEvents(storyId: string, branchId: string, beforeSegmentId?: string): Promise<any[]> {
+    let resolved = await prisma.keyEvent.findMany({
+      where: { storyId, branchId, status: 'resolved' },
+    });
 
     if (beforeSegmentId) {
       const chain = await getOrderedChain(storyId, branchId);
       const beforeIdx = chain.findIndex(s => s.id === beforeSegmentId);
       if (beforeIdx >= 0) {
         const chainSegmentIds = new Set(chain.slice(0, beforeIdx).map(s => s.id));
-        resolved = resolved.filter(e => chainSegmentIds.has(e.segmentId));
+        resolved = resolved.filter(e => e.segmentId && chainSegmentIds.has(e.segmentId));
       }
     }
 
-    // 按解决时间倒序
-    resolved.sort((a, b) => (b.resolvedAt || '').localeCompare(a.resolvedAt || ''));
+    resolved.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
     return resolved;
   }
 
-  /**
-   * 将事件标记为已解决
-   */
-  async resolveEvent(eventId: string, resolvedBySegmentId: string): Promise<KeyEvent | null> {
-    const all = await eventsStore.load();
-    const idx = all.findIndex(e => e.eventId === eventId);
-    if (idx === -1) return null;
-
-    all[idx].status = 'resolved';
-    all[idx].resolvedAt = new Date().toISOString();
-    all[idx].resolvedBySegmentId = resolvedBySegmentId;
-    await eventsStore.save(all);
-    return all[idx];
+  async resolveEvent(eventId: string, resolvedBySegmentId: string): Promise<any | null> {
+    try {
+      const event = await prisma.keyEvent.update({
+        where: { id: eventId },
+        data: {
+          status: 'resolved',
+          resolvedBySegmentId,
+        },
+      });
+      return event;
+    } catch {
+      return null;
+    }
   }
 
-  /**
-   * 获取所有事件（用于调试/管理）
-   */
-  async getAllEvents(storyId: string, branchId: string): Promise<KeyEvent[]> {
-    const all = await eventsStore.load();
-    return all.filter(e => e.storyId === storyId && e.branchId === branchId);
+  async getAllEvents(storyId: string, branchId: string): Promise<any[]> {
+    const events = await prisma.keyEvent.findMany({
+      where: { storyId, branchId },
+    });
+    return events;
   }
 }
 
 /**
  * C2.6: 将活跃事件和近期事件格式化为 prompt 片段
  */
-export function buildEventPrompt(activeEvents: KeyEvent[], recentEvents?: KeyEvent[]): string {
+export function buildEventPrompt(activeEvents: any[], recentEvents?: any[]): string {
   if (activeEvents.length === 0 && (!recentEvents || recentEvents.length === 0)) {
     return '';
   }
@@ -182,7 +179,7 @@ export function buildEventPrompt(activeEvents: KeyEvent[], recentEvents?: KeyEve
   lines.push('## 当前活跃事件线');
 
   if (activeEvents.length > 0) {
-    const typeLabels: Record<EventType, string> = {
+    const typeLabels: Record<string, string> = {
       death: '💀 死亡', alliance: '🤝 结盟', betrayal: '🗡️ 背叛',
       discovery: '🔍 发现', battle: '⚔️ 战斗', emotional: '💔 情感',
       revelation: '💡 真相', departure: '🚪 离开', arrival: '🌅 登场',
@@ -190,7 +187,7 @@ export function buildEventPrompt(activeEvents: KeyEvent[], recentEvents?: KeyEve
     };
 
     for (const event of activeEvents) {
-      const label = typeLabels[event.type] || '📌 其他';
+      const label = typeLabels[event.eventType as string] || typeLabels[event.type as string] || '📌 其他';
       const imp = event.importance === 'critical' ? '【关键】' : event.importance === 'major' ? '【重要】' : '';
       lines.push(`- ${label} ${imp}：${event.description}`);
     }
@@ -202,11 +199,9 @@ export function buildEventPrompt(activeEvents: KeyEvent[], recentEvents?: KeyEve
     lines.push('');
     lines.push('### 近期已解决事件');
     for (const event of recentEvents.slice(0, 5)) {
-      lines.push(`- ${event.type}：${event.description}`);
+      lines.push(`- ${event.eventType || event.type}：${event.description}`);
     }
   }
 
   return lines.join('\n');
 }
-
-export { eventsStore };

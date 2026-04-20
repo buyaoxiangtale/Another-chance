@@ -11,7 +11,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { ConsistencyChecker } from '../src/lib/consistency-checker';
+import { ConsistencyChecker, type CharacterStateForCheck } from '../src/lib/consistency-checker';
 import { estimateTokens, extractSummaryFromSegment } from '../src/lib/context-summarizer';
 
 // ── Helper ──
@@ -167,8 +167,8 @@ describe('5.4 长链续写远端上下文保留', () => {
     const summary = extractSummaryFromSegment(segment, [segment]);
 
     // 应提取到关键事件
-    expect(summary.keyEvents.length).toBeGreaterThan(0);
-    const allEvents = summary.keyEvents.join(' ');
+    expect(summary.metadata.keyEvents!.length).toBeGreaterThan(0);
+    const allEvents = summary.metadata.keyEvents!.join(' ');
     expect(allEvents).toMatch(/胜|败|发现|降/);
   });
 
@@ -183,8 +183,8 @@ describe('5.4 长链续写远端上下文保留', () => {
     const summary = extractSummaryFromSegment(segment, [segment]);
 
     // 应包含时间线状态变化
-    expect(summary.stateChanges.length).toBeGreaterThan(0);
-    const allStates = summary.stateChanges.join(' ');
+    expect(summary.metadata.stateChanges!.length).toBeGreaterThan(0);
+    const allStates = summary.metadata.stateChanges!.join(' ');
     expect(allStates).toMatch(/春|庄重/);
   });
 });
@@ -203,9 +203,9 @@ describe('5.5 AI 摘要质量（规则提取基线）', () => {
     const summary = extractSummaryFromSegment(segment, [segment]);
 
     // 规则摘要应包含角色行动
-    expect(summary.characterActions.length).toBeGreaterThan(0);
+    expect(summary.metadata.characterActions!.length).toBeGreaterThan(0);
     // 每个角色都应有行动记录
-    expect(summary.characterActions.length).toBe(3);
+    expect(summary.metadata.characterActions!.length).toBe(3);
   });
 
   it('规则摘要应提取死亡事件', () => {
@@ -218,7 +218,7 @@ describe('5.5 AI 摘要质量（规则提取基线）', () => {
     const summary = extractSummaryFromSegment(segment, [segment]);
 
     // 应检测到死亡事件
-    const hasDeath = summary.keyEvents.some(e => e.includes('死'));
+    const hasDeath = summary.metadata.keyEvents!.some(e => e.includes('死'));
     expect(hasDeath).toBe(true);
   });
 
@@ -233,11 +233,9 @@ describe('5.5 AI 摘要质量（规则提取基线）', () => {
 
     const summary = extractSummaryFromSegment(segment, [segment]);
 
-    expect(summary.segmentId).toBe('seg_meta');
-    expect(summary.storyId).toBe('story_123');
-    expect(summary.branchId).toBe('branch_456');
-    // chainIndex comes from findIndex on the chain array
-    expect(summary.chainIndex).toBe(0); // segment is at index 0 in the chain
+    expect(summary.summaryText.length).toBeGreaterThan(0);
+    // metadata is present (segmentId/storyId/branchId are on the segment object, not summary)
+    expect(summary.metadata).toBeDefined();
     expect(summary.tokenCount).toBeGreaterThan(0);
     expect(summary.originalTokenCount).toBeGreaterThan(0);
   });
@@ -258,8 +256,7 @@ describe('5.6 降级机制', () => {
     const summary = extractSummaryFromSegment(segment, [segment]);
 
     expect(summary.summaryText.length).toBeGreaterThan(0);
-    expect(summary.segmentId).toBe('seg_fallback');
-    expect(summary.storyId).toBe('story_test');
+    // segmentId is on the segment itself, not the summary result
   });
 
   it('规则摘要应处理空内容和异常输入', () => {
@@ -267,8 +264,8 @@ describe('5.6 降级机制', () => {
     const summary = extractSummaryFromSegment(emptySegment, [emptySegment]);
 
     expect(summary.summaryText.length).toBeGreaterThan(0);
-    expect(summary.keyEvents).toBeDefined();
-    expect(summary.characterActions).toBeDefined();
+    expect(summary.metadata.keyEvents).toBeDefined();
+    expect(summary.metadata.characterActions).toBeDefined();
   });
 
   it('规则摘要应处理超长内容', () => {
@@ -289,7 +286,7 @@ describe('ConsistencyChecker 综合检测', () => {
   const checker = new ConsistencyChecker();
 
   it('应对正史类内容生成完整的约束检查结果', () => {
-    const characterStates = [
+    const characterStates: CharacterStateForCheck[] = [
       {
         characterId: 'qin',
         name: '秦始皇',

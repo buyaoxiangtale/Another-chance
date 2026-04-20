@@ -4,7 +4,7 @@
  * 支持 429/5xx 指数退避重试、并发控制优先级队列、全局限流
  */
 
-import { type Story } from '@/lib/simple-db';
+import { type Story } from '@/lib/prisma';
 import { FICTION_KEYWORDS } from './genre-config';
 
 // ─── 1.1 RetryConfig ────────────────────────────────────────────────

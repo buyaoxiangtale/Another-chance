@@ -1,20 +1,29 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getUserIdFromRequest } from '@/lib/auth-helpers';
+import { canViewStory, canEditStory } from '@/lib/permissions';
+import prisma from '@/lib/prisma';
 import { directorManager } from '@/lib/director-manager';
-
-/**
- * 5.6 导演模式 API
- * GET  — 获取当前导演状态
- * PATCH — 更新角色状态/世界变量/约束
- */
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: { id: string } },
 ) {
   try {
+    const userId = await getUserIdFromRequest(request);
+    if (!userId) {
+      return NextResponse.json({ error: '请先登录' }, { status: 401 });
+    }
+
     const { id: storyId } = params;
     if (!storyId) {
       return NextResponse.json({ error: '缺少参数' }, { status: 400 });
+    }
+
+    const story = await prisma.story.findUnique({ where: { id: storyId } });
+    if (!story) return NextResponse.json({ error: '故事不存在' }, { status: 404 });
+
+    if (!canViewStory(story, userId)) {
+      return NextResponse.json({ error: '无权查看' }, { status: 403 });
     }
 
     const state = await directorManager.getOrCreate(storyId);
@@ -27,12 +36,24 @@ export async function GET(
 
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: { id: string } },
 ) {
   try {
+    const userId = await getUserIdFromRequest(request);
+    if (!userId) {
+      return NextResponse.json({ error: '请先登录' }, { status: 401 });
+    }
+
     const { id: storyId } = params;
     if (!storyId) {
       return NextResponse.json({ error: '缺少参数' }, { status: 400 });
+    }
+
+    const story = await prisma.story.findUnique({ where: { id: storyId } });
+    if (!story) return NextResponse.json({ error: '故事不存在' }, { status: 404 });
+
+    if (!canEditStory(story, userId)) {
+      return NextResponse.json({ error: '无权编辑' }, { status: 403 });
     }
 
     const body = await request.json();

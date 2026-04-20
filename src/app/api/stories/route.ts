@@ -1,111 +1,118 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { storiesStore, segmentsStore, type Story, type StorySegment } from '@/lib/simple-db';
+import prisma from '@/lib/prisma';
+import { getUserIdFromRequest } from '@/lib/auth-helpers';
+import { canViewStory } from '@/lib/permissions';
 import { STORY_TYPE_TO_GENRE } from '@/lib/genre-config';
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    const stories = await storiesStore.load();
-    
-    // 按创建时间倒序排列
-    const sortedStories = stories.sort((a: Story, b: Story) => 
-      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-    );
+    const userId = await getUserIdFromRequest(request);
+    const { searchParams } = new URL(request.url);
+    const feed = searchParams.get('feed');
+
+    let where: any = {};
+
+    if (feed === 'public') {
+      where.visibility = 'PUBLIC';
+    } else if (userId) {
+      where = {
+        OR: [
+          { ownerId: userId },
+          { visibility: 'PUBLIC' },
+          { visibility: 'UNLISTED' },
+        ],
+      };
+    } else {
+      where.visibility = 'PUBLIC';
+    }
+
+    const stories = await prisma.story.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      include: { _count: { select: { segments: true } } },
+    });
 
     return NextResponse.json({
       success: true,
-      stories: sortedStories,
-      total: sortedStories.length
+      stories,
+      total: stories.length,
     });
   } catch (error) {
     console.error('获取故事列表失败:', error);
     return NextResponse.json(
-      { 
-        error: '获取故事列表失败',
-        details: error instanceof Error ? error.message : '未知错误'
-      },
-      { status: 500 }
+      { error: '获取故事列表失败' },
+      { status: 500 },
     );
   }
 }
 
 export async function POST(request: NextRequest) {
   try {
+    const userId = await getUserIdFromRequest(request);
+    if (!userId) {
+      return NextResponse.json({ error: '请先登录' }, { status: 401 });
+    }
+
     const body = await request.json();
     const { title, description, author, genre, era, storyType } = body;
 
     if (!title) {
-      return NextResponse.json(
-        { error: '故事标题是必填项' },
-        { status: 400 }
-      );
-    }
-
-    const stories = await storiesStore.load();
-
-    // 幂等：标题已存在则返回已有故事
-    const existing = stories.find((s: Story) => s.title === title);
-    if (existing) {
-      return NextResponse.json({
-        success: true,
-        story: existing,
-        message: '故事已存在'
-      });
+      return NextResponse.json({ error: '故事标题是必填项' }, { status: 400 });
     }
 
     const effectiveGenre = genre || (storyType ? STORY_TYPE_TO_GENRE[storyType] : undefined);
 
-    const newStory: Story = {
-      id: `story_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      title,
-      description: description || '',
-      author: author || '佚名',
-      genre: effectiveGenre,
-      era: era || undefined,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    };
+    const existing = await prisma.story.findFirst({
+      where: { title, ownerId: userId },
+    });
+    if (existing) {
+      return NextResponse.json({
+        success: true,
+        story: existing,
+        message: '故事已存在',
+      });
+    }
 
-    stories.push(newStory);
-    await storiesStore.save(stories);
+    const story = await prisma.story.create({
+      data: {
+        title,
+        description: description || '',
+        author: author || '佚名',
+        genre: effectiveGenre,
+        era,
+        ownerId: userId,
+        visibility: 'PRIVATE',
+      },
+    });
 
-    // 自动生成首个段落（故事开篇）
-    const firstSegment: StorySegment = {
-      id: `seg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      title: `${title}·开篇`,
-      content: `《${title}》的故事开始了...`, // 临时内容，后续通过 AI 生成完整开篇
-      isBranchPoint: false,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      storyId: newStory.id,
-      branchId: 'main',
-      parentSegmentId: '',
-      imageUrls: []
-    };
+    const firstSegment = await prisma.storySegment.create({
+      data: {
+        title: `${title}·开篇`,
+        content: `《${title}》的故事开始了...`,
+        isBranchPoint: false,
+        storyId: story.id,
+        branchId: 'main',
+        parentSegmentId: null,
+        imageUrls: [],
+        visibility: 'PRIVATE',
+      },
+    });
 
-    const segments = await segmentsStore.load();
-    segments.push(firstSegment);
-    await segmentsStore.save(segments);
+    await prisma.story.update({
+      where: { id: story.id },
+      data: { rootSegmentId: firstSegment.id },
+    });
 
-    // 更新故事的 rootSegmentId
-    newStory.rootSegmentId = firstSegment.id;
-    const updatedStories = stories.map((s: Story) => s.id === newStory.id ? newStory : s);
-    await storiesStore.save(updatedStories);
+    const fullStory = await prisma.story.findUnique({ where: { id: story.id } });
 
     return NextResponse.json({
       success: true,
-      story: newStory,
+      story: fullStory,
       firstSegment,
-      message: '故事创建成功，已生成开篇段落'
+      message: '故事创建成功，已生成开篇段落',
     }, { status: 201 });
-
   } catch (error) {
     console.error('创建故事失败:', error);
-    return NextResponse.json(
-      { 
-        error: '创建故事失败',
-        details: error instanceof Error ? error.message : '未知错误'
-      },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: '创建故事失败' }, { status: 500 });
   }
 }

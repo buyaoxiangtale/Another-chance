@@ -1,19 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server';
-import {
-  storiesStore, segmentsStore, branchesStore,
-  charactersStore, historicalReferencesStore, directorStatesStore,
-} from '@/lib/simple-db';
+import prisma from '@/lib/prisma';
+import { getUserIdFromRequest } from '@/lib/auth-helpers';
+import { canViewStory, canEditStory, canDeleteStory } from '@/lib/permissions';
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: { id: string } },
 ) {
   try {
-    const stories = await storiesStore.load();
-    const story = stories.find((s: any) => s.id === params.id);
+    const userId = await getUserIdFromRequest(request);
+    const story = await prisma.story.findUnique({ where: { id: params.id } });
 
     if (!story) {
       return NextResponse.json({ error: '故事不存在' }, { status: 404 });
+    }
+
+    if (!canViewStory(story, userId ?? undefined)) {
+      return NextResponse.json({ error: '无权查看' }, { status: 403 });
     }
 
     return NextResponse.json({ success: true, story });
@@ -22,117 +25,81 @@ export async function GET(
   }
 }
 
-/**
- * 更新故事（修改标题、描述、genre 等）
- */
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: { id: string } },
 ) {
   try {
-    const { id } = params;
-    const body = await request.json();
-    const { title, description, genre, era, author } = body;
+    const userId = await getUserIdFromRequest(request);
+    if (!userId) {
+      return NextResponse.json({ error: '请先登录' }, { status: 401 });
+    }
 
-    const stories = await storiesStore.load();
-    const idx = stories.findIndex((s: any) => s.id === id);
-    if (idx === -1) {
+    const story = await prisma.story.findUnique({ where: { id: params.id } });
+    if (!story) {
       return NextResponse.json({ error: '故事不存在' }, { status: 404 });
     }
 
-    // 只更新传入的字段
-    const allowedFields = ['title', 'description', 'genre', 'era', 'author'];
-    for (const field of allowedFields) {
-      if (body[field] !== undefined) {
-        (stories[idx] as any)[field] = body[field];
+    if (!canEditStory(story, userId)) {
+      return NextResponse.json({ error: '无权编辑' }, { status: 403 });
+    }
+
+    const body = await request.json();
+    const { title, description, genre, era, author, visibility, publishedAt } = body;
+
+    const data: any = {};
+    if (title !== undefined) data.title = title;
+    if (description !== undefined) data.description = description;
+    if (genre !== undefined) data.genre = genre;
+    if (era !== undefined) data.era = era;
+    if (author !== undefined) data.author = author;
+    if (visibility !== undefined) {
+      data.visibility = visibility;
+      if (visibility === 'PUBLIC' && !story.publishedAt) {
+        data.publishedAt = new Date();
       }
     }
-    (stories[idx] as any).updatedAt = new Date().toISOString();
+    if (publishedAt !== undefined) data.publishedAt = publishedAt ? new Date(publishedAt) : null;
+    data.updatedAt = new Date();
 
-    await storiesStore.save(stories);
-    return NextResponse.json({ success: true, story: stories[idx] });
+    const updated = await prisma.story.update({
+      where: { id: params.id },
+      data,
+    });
+
+    return NextResponse.json({ success: true, story: updated });
   } catch (error) {
     console.error('更新故事失败:', error);
     return NextResponse.json({ error: '更新故事失败' }, { status: 500 });
   }
 }
 
-/**
- * 删除故事（级联清理所有关联数据）
- */
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: { id: string } },
 ) {
   try {
-    const { id } = params;
+    const userId = await getUserIdFromRequest(request);
+    if (!userId) {
+      return NextResponse.json({ error: '请先登录' }, { status: 401 });
+    }
 
-    // 1. 检查故事是否存在
-    const stories = await storiesStore.load();
-    const idx = stories.findIndex((s: any) => s.id === id);
-    if (idx === -1) {
+    const story = await prisma.story.findUnique({ where: { id: params.id } });
+    if (!story) {
       return NextResponse.json({ error: '故事不存在' }, { status: 404 });
     }
 
-    const storyTitle = (stories[idx] as any).title;
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!canDeleteStory(story, user ? { id: user.id, isAdmin: user.isAdmin } : null)) {
+      return NextResponse.json({ error: '无权删除' }, { status: 403 });
+    }
 
-    // 2. 获取该故事所有分支
-    const branches = await branchesStore.load();
-    const branchIds = new Set(
-      branches
-        .filter((b: any) => b.storyId === id)
-        .map((b: any) => b.id)
-    );
-    branchIds.add('main'); // main 分支也要清理
-
-    // 3. 删除所有关联段落
-    const segments = await segmentsStore.load();
-    const remainingSegments = segments.filter(
-      (s: any) => s.storyId !== id
-    );
-    const deletedSegmentsCount = segments.length - remainingSegments.length;
-    await segmentsStore.save(remainingSegments);
-
-    // 4. 删除所有关联分支
-    const remainingBranches = branches.filter(
-      (b: any) => b.storyId !== id
-    );
-    await branchesStore.save(remainingBranches);
-
-    // 5. 删除关联角色
-    const characters = await charactersStore.load();
-    const remainingCharacters = characters.filter(
-      (c: any) => c.storyId !== id
-    );
-    const deletedCharactersCount = characters.length - remainingCharacters.length;
-    await charactersStore.save(remainingCharacters);
-
-    // 6. 删除关联历史引用
-    const refs = await historicalReferencesStore.load();
-    const remainingRefs = refs.filter(
-      (r: any) => r.storyId !== id
-    );
-    await historicalReferencesStore.save(remainingRefs);
-
-    // 7. 删除导演状态
-    const directorStates = await directorStatesStore.load();
-    const remainingDirector = directorStates.filter(
-      (d: any) => d.storyId !== id
-    );
-    await directorStatesStore.save(remainingDirector);
-
-    // 8. 删除故事本身
-    stories.splice(idx, 1);
-    await storiesStore.save(stories);
+    // Cascade delete via Prisma (segments, branches, characters, director states)
+    await prisma.story.delete({ where: { id: params.id } });
 
     return NextResponse.json({
       success: true,
-      message: `故事「${storyTitle}」已删除`,
-      stats: {
-        deletedSegments: deletedSegmentsCount,
-        deletedBranches: remainingBranches.length - branches.length + (branches.filter((b: any) => b.storyId === id).length),
-        deletedCharacters: deletedCharactersCount,
-      }
+      message: `故事「${story.title}」已删除`,
     });
   } catch (error) {
     console.error('删除故事失败:', error);

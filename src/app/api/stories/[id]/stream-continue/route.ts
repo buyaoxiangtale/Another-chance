@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { storiesStore, segmentsStore, getOrderedChain, type StorySegment } from '@/lib/simple-db';
+import prisma from '@/lib/prisma';
+import { getUserIdFromRequest } from '@/lib/auth-helpers';
+import { canViewStory } from '@/lib/permissions';
+import { getOrderedChain } from '@/lib/chain-helpers';
 import { buildFullPrompt } from '@/lib/prompt-builder';
 import { PacingEngine } from '@/lib/pacing-engine';
 import { consistencyChecker } from '@/lib/consistency-checker';
@@ -7,14 +10,16 @@ import { callAI, buildOpenAIRequest, aiRequestQueue } from '@/lib/ai-client';
 import { contextSummarizer } from '@/lib/context-summarizer';
 import { generateImagesForSegment } from '@/lib/image-generator';
 
-/**
- * 5.2 + 5.4 + 5.5 改造 stream-continue route
- * - 支持按行流式输出（每行一个 SSE 事件）
- * - 支持暂停指令
- * - SSE 事件类型：content(原始token)、line(完整行)、pause(暂停信号)、metadata(元数据)、[DONE]
- */
-export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(
+  request: NextRequest,
+  { params }: { params: { id: string } },
+) {
   try {
+    const userId = await getUserIdFromRequest(request);
+    if (!userId) {
+      return NextResponse.json({ error: '请先登录' }, { status: 401 });
+    }
+
     const { id: storyId } = params;
     const { branchId = 'main', pacingConfig, directorOverrides } = await request.json();
 
@@ -22,9 +27,12 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       return NextResponse.json({ error: '缺少参数' }, { status: 400 });
     }
 
-    const stories = await storiesStore.load();
-    const story = stories.find((s: any) => s.id === storyId);
+    const story = await prisma.story.findUnique({ where: { id: storyId } });
     if (!story) return NextResponse.json({ error: '故事不存在' }, { status: 404 });
+
+    if (!canViewStory(story, userId)) {
+      return NextResponse.json({ error: '无权查看' }, { status: 403 });
+    }
 
     const chain = await getOrderedChain(storyId, branchId);
     if (chain.length === 0) {
@@ -32,44 +40,29 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     }
     const tailSegment = chain[chain.length - 1];
 
-    // ─── 诊断日志：续写请求入口 ───
-    console.log('\n' + '='.repeat(70));
-    console.log(`\x1b[36m[stream-continue]\x1b[0m 续写请求`);
-    console.log(`  storyId:    ${storyId}`);
-    console.log(`  title:      ${story.title}`);
-    console.log(`  story.genre: ${(story as any)?.genre || '(空)'}`);
-    console.log(`  story.desc:  ${(story.description || '').slice(0, 80)}...`);
-    console.log(`  chainLen:   ${chain.length} 段`);
-    console.log(`  pacing:     ${pacingConfig?.pace || '(无)'}`);
-    console.log('='.repeat(70));
-
-    // Build prompt — 统一使用 buildFullPrompt，确保所有改进都生效
     const prompt = await buildFullPrompt({
       storyId,
       branchId,
-      tailSegment,
-      chain,
+      tailSegment: tailSegment as any,
+      chain: chain as any,
       storyTitle: story.title,
-      storyDescription: story.description,
+      storyDescription: story.description ?? undefined,
       pacingConfig,
       directorOverrides,
     });
 
     const pacingEngine = pacingConfig ? new PacingEngine(pacingConfig) : null;
 
-    // C3: 矛盾检测 — 续写前检测前文矛盾
     let consistencyWarnings: string[] = [];
     try {
-      const preIssues = await consistencyChecker.checkChainConsistency(chain);
+      const preIssues = await consistencyChecker.checkChainConsistency(chain as any);
       if (preIssues.length > 0) {
-        consistencyWarnings = preIssues.map(i => `[${i.severity}] ${i.description}`);
-        console.warn(`[stream-continue] 前文矛盾检测: ${consistencyWarnings.join('; ')}`);
+        consistencyWarnings = preIssues.map((i: any) => `[${i.severity}] ${i.description}`);
       }
     } catch (e) {
-      console.warn('[stream-continue] 前文矛盾检测失败（非致命）:', e);
+      console.warn('[stream-continue] 矛盾检测失败:', e);
     }
 
-    // 5.5 发送 metadata 事件
     const metadataEvent = {
       type: 'metadata',
       storyId,
@@ -80,20 +73,12 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     };
 
     const maxTokens = pacingConfig?.pace === 'detailed' ? 4000 : 2000;
-
-    // 使用统一的 AI 客户端
-    const { url, headers, body } = buildOpenAIRequest(prompt, undefined, maxTokens, story);
-
-    // 启用流式响应
+    const { url, headers, body } = buildOpenAIRequest(prompt, undefined, maxTokens, story as any);
     const bodyObj = JSON.parse(body);
     bodyObj.stream = true;
     const streamBody = JSON.stringify(bodyObj);
 
-    const aiResponse = await fetch(url, {
-      method: 'POST',
-      headers,
-      body: streamBody
-    });
+    const aiResponse = await fetch(url, { method: 'POST', headers, body: streamBody });
 
     if (!aiResponse.ok) {
       const text = await aiResponse.text();
@@ -106,7 +91,6 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         let fullContent = '';
 
         try {
-          // 5.5 发送 metadata
           controller.enqueue(encoder.encode(`data: ${JSON.stringify(metadataEvent)}\n\n`));
 
           const reader = aiResponse.body?.getReader();
@@ -137,10 +121,8 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
                   fullContent += content;
                   lineBuffer += content;
 
-                  // 5.4/5.5: 检测是否完成一个语义段落（换行符），发送 line 事件
                   if (pacingEngine && (content.includes('\n') || content.includes('。'))) {
-                    const completedLines = lineBuffer.split(/\n+/).filter(l => l.trim());
-                    // Keep the last potentially incomplete line in buffer
+                    const completedLines = lineBuffer.split(/\n+/).filter((l: string) => l.trim());
                     lineBuffer = completedLines.pop() || '';
 
                     const maxLines = pacingEngine.getMaxLinesPerStep();
@@ -149,13 +131,11 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
                       controller.enqueue(encoder.encode(`data: ${JSON.stringify(lineEvent)}\n\n`));
                     }
 
-                    // 5.5: 如果还有未发送的行，发送 pause 信号
                     if (completedLines.length > maxLines) {
                       const pauseEvent = { type: 'pause', reason: 'line_limit', remaining: completedLines.length - maxLines };
                       controller.enqueue(encoder.encode(`data: ${JSON.stringify(pauseEvent)}\n\n`));
                     }
                   } else {
-                    // 向后兼容：无 pacingConfig 时发送原始 content 事件
                     controller.enqueue(encoder.encode(`data: ${JSON.stringify({ content })}\n\n`));
                   }
                 }
@@ -163,29 +143,10 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
             }
           }
 
-          // Flush remaining line buffer
           if (lineBuffer.trim() && pacingEngine) {
             controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'line', content: lineBuffer.trim(), index: 0 })}\n\n`));
           }
 
-          // Save the completed segment
-          const allSegments = await segmentsStore.load();
-          const newSegment: StorySegment = {
-            id: `seg_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
-            storyId,
-            title: '故事续写',
-            content: fullContent,
-            isBranchPoint: false,
-            branchId,
-            parentSegmentId: tailSegment.id,
-            imageUrls: [],
-            narrativePace: pacingConfig?.pace,
-            mood: pacingConfig?.mood,
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString()
-          };
-
-          // 检查内容是否为空
           if (!fullContent || fullContent.trim().length === 0) {
             const errorEvent = { type: 'error', message: 'AI 未生成有效内容，请重试' };
             controller.enqueue(encoder.encode(`data: ${JSON.stringify(errorEvent)}\n\n`));
@@ -194,49 +155,33 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
             return;
           }
 
-          allSegments.push(newSegment);
-          await segmentsStore.save(allSegments);
-
-          // 异步预生成新段落摘要（下次续写直接命中缓存，避免续写时同步调用 AI）
-          contextSummarizer.generateSegmentSummary(newSegment, [...chain, newSegment], story?.genre)
-            .catch(e => console.warn('[stream-continue] 摘要预生成失败（非致命）:', e));
-
-          // P6-2: 异步触发图片生成（低优先级队列，不阻塞主流程）
-          aiRequestQueue.enqueue(
-            async () => {
-              try {
-                const images = await generateImagesForSegment({
-                  segmentId: newSegment.id,
-                  segmentContent: fullContent,
-                });
-                if (images.length > 0) {
-                  const segs = await segmentsStore.load();
-                  const si = segs.findIndex((s: any) => s.id === newSegment.id);
-                  if (si !== -1) {
-                    segs[si].imageUrls = images.map(img => img.url);
-                    segs[si].updatedAt = new Date().toISOString();
-                    await segmentsStore.save(segs);
-                  }
-                  console.log(`[stream-continue] 图片生成完成: ${images.length} 张`);
-                }
-              } catch (e) {
-                console.warn('[stream-continue] 图片生成失败（非致命）:', e);
-              }
-              return new Response(null, { status: 200 });
+          const newSegment = await prisma.storySegment.create({
+            data: {
+              storyId,
+              title: '故事续写',
+              content: fullContent,
+              isBranchPoint: false,
+              branchId,
+              parentSegmentId: tailSegment.id,
+              imageUrls: [],
+              narrativePace: pacingConfig?.pace,
+              mood: pacingConfig?.mood,
+              visibility: story.visibility,
             },
-            'low'
-          ).catch(() => {});
+          });
 
-          // C3: 续写后检测新内容矛盾
+          contextSummarizer.generateSegmentSummary(newSegment as any, [...chain, newSegment] as any, story?.genre ?? undefined)
+            .catch((e: any) => console.warn('[stream-continue] 摘要预生成失败:', e));
+
           try {
-            const postIssues = await consistencyChecker.runConsistencyCheck(newSegment, [...chain, newSegment]);
+            const postIssues = await consistencyChecker.runConsistencyCheck(newSegment as any, [...chain, newSegment] as any);
             if (postIssues.length > 0) {
-              const postWarnings = postIssues.map(i => `[${i.severity}] ${i.description}`);
+              const postWarnings = postIssues.map((i: any) => `[${i.severity}] ${i.description}`);
               const warningEvent = { type: 'consistency_warnings', warnings: postWarnings };
               controller.enqueue(encoder.encode(`data: ${JSON.stringify(warningEvent)}\n\n`));
             }
           } catch (e) {
-            console.warn('[stream-continue] 新内容矛盾检测失败（非致命）:', e);
+            console.warn('[stream-continue] 新内容矛盾检测失败:', e);
           }
 
           controller.enqueue(encoder.encode('data: [DONE]\n\n'));
@@ -244,7 +189,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         } catch (err) {
           controller.error(err);
         }
-      }
+      },
     });
 
     return new Response(stream, {
@@ -252,14 +197,13 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         'Content-Type': 'text/event-stream',
         'Cache-Control': 'no-cache',
         'Connection': 'keep-alive',
-      }
+      },
     });
-
   } catch (error) {
     console.error('流式续写失败:', error);
     return NextResponse.json(
       { error: '流式续写失败', details: String(error) },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

@@ -3,7 +3,9 @@
  * 检测故事内容中的角色、时间线和世界观矛盾
  */
 
-import { getOrderedChain, type StorySegment } from './simple-db';
+import { getOrderedChain } from '@/lib/chain-helpers';
+import prisma from '@/lib/prisma';
+import type { StorySegment } from '@/lib/prisma';
 import type { Character, CharacterStateEntry } from '@/types/story';
 
 // === 类型定义 ===
@@ -362,8 +364,7 @@ export class ConsistencyChecker {
     chain: StorySegment[]
   ): Promise<CharacterStateForCheck[]> {
     try {
-      const { charactersStore } = await import('./simple-db');
-      const characters = await charactersStore.load();
+      const characters = await prisma.character.findMany({ where: { storyId } });
       const storyCharacters = characters.filter((c: any) =>
         c.storyId === storyId
       );
@@ -418,15 +419,16 @@ export class ConsistencyChecker {
 
       // 从 timeline 字段获取
       if (seg.timeline) {
-        if (seg.timeline.era) timeline.currentEra = seg.timeline.era;
-        if (seg.timeline.year) timeline.currentYear = seg.timeline.year;
-        if (seg.timeline.season) timeline.season = seg.timeline.season;
+        const tl = seg.timeline as Record<string, any>;
+        if (tl.era) timeline.currentEra = tl.era;
+        if (tl.year) timeline.currentYear = tl.year;
+        if (tl.season) timeline.season = tl.season;
 
         timeline.keyDates.push({
           label: seg.title || `段落${seg.id}`,
           segmentId: seg.id,
-          year: seg.timeline.year,
-          season: seg.timeline.season,
+          year: tl.year,
+          season: tl.season,
         });
       }
     }
@@ -439,8 +441,7 @@ export class ConsistencyChecker {
     lorebook: LorebookEntry[];
   }> {
     try {
-      const { storiesStore } = await import('./simple-db');
-      const stories = await storiesStore.load();
+      const stories = await prisma.story.findMany();
       const story = stories.find((s: any) => s.id === storyId);
 
       const worldVariables: WorldVariable[] = [];

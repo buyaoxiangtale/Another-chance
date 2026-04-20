@@ -4,9 +4,13 @@
  * 功能：
  * - 调用 OpenAI-compatible 图片生成 API（DALL-E / 硅基流动 / 通义万相等）
  * - 从段落内容提取 1-3 个场景描述作为 prompt
- * - 支持中国历史风格 prompt 模板（历史写实、水墨画、工笔画、敦煌壁画）
+ * - 支持 10 种图片风格（历史/水墨/工笔/敦煌/现代/科幻/玄幻/武侠/动漫/悬疑）
+ * - 智能风格检测（同人/动漫/仙侠/西幻/现代等）
  * - 重试 & 降级机制（失败返回占位图，不阻塞主流程）
  * - 图片本地缓存（保存到 public/generated-images/）
+ * - 强力文字抑制（enforceNoTextInPrompt，兼容 GLM/cogview）
+ * - 角色视觉一致性（seed + CharacterVisualHint）
+ * - AI 上下文感知场景提取（extractSceneDescriptionsWithAI）
  */
 
 import { join } from 'path';
@@ -104,14 +108,12 @@ function getConfig(): ImageGeneratorConfig {
   };
 }
 
-// ─── 2.2 场景描述提取器 ───────────────────────────────────────────────
+// ─── 场景描述提取器 ──────────────────────────────────────────────────
 
 /**
  * 从段落内容提取 1-3 个场景描述作为图片 prompt。
- * 策略：按标点分段，选取最富视觉意象的句子，然后翻译为英文 prompt。
  */
 export function extractSceneDescriptions(segment: string): SceneDescription[] {
-  // 按句号、感叹号、问号、换行分段，过滤过短的片段
   const sentences = segment
     .split(/[。！？\n]+/)
     .map(s => s.trim())
@@ -119,15 +121,10 @@ export function extractSceneDescriptions(segment: string): SceneDescription[] {
 
   if (sentences.length === 0) return [];
 
-  // 简单启发式：给每个句子打视觉意象分
   const visualKeywords = [
-    // 景物
     '山', '水', '河', '湖', '海', '天', '月', '日', '星', '云', '雨', '雪', '风', '花', '树', '林', '城', '墙', '宫', '殿', '楼', '亭', '桥', '路', '街',
-    // 动作 / 事件
     '战', '斗', '杀', '射', '骑', '跑', '走', '坐', '立', '跪', '拜', '舞', '唱', '奏', '饮', '食',
-    // 氛围
     '血', '火', '光', '暗', '烟', '尘', '影', '色', '声', '红', '黑', '白', '金', '银',
-    // 人物相关
     '帝', '王', '将', '臣', '兵', '军', '骑', '马', '剑', '弓', '旗', '甲',
   ];
 
@@ -137,13 +134,11 @@ export function extractSceneDescriptions(segment: string): SceneDescription[] {
     let score = 0;
     let type: SceneDescription['type'] = 'scene';
 
-    // 人物关键词 → character 类型
     if (/[帝王子将臣帅侯伯公夫人娘妃妾仆]/.test(text) && /穿|着|披|戴|持|握|面|目|身/.test(text)) {
       type = 'character';
       score += 3;
     }
 
-    // 物件关键词 → object 类型
     if (/[剑刀弓枪戟盾印符卷书简鼎玉佩]/.test(text) && !/[帝王子将臣帅侯伯公夫人娘]/.test(text)) {
       type = 'object';
       score += 2;
@@ -153,13 +148,11 @@ export function extractSceneDescriptions(segment: string): SceneDescription[] {
       if (text.includes(kw)) score += 1;
     }
 
-    // 长度适中加分
     if (text.length >= 15 && text.length <= 60) score += 1;
 
     return { text, score, type };
   });
 
-  // 按得分降序，取前 3，且保证至少有不同类型
   scored.sort((a, b) => b.score - a.score);
 
   const results: SceneDescription[] = [];
@@ -168,7 +161,6 @@ export function extractSceneDescriptions(segment: string): SceneDescription[] {
   for (const item of scored) {
     if (results.length >= 3) break;
     if (results.length >= 1 && usedTypes.has(item.type) && scored.length > results.length) {
-      // 已有同类型且还有其他候选，跳过以增加多样性
       continue;
     }
 
@@ -181,9 +173,6 @@ export function extractSceneDescriptions(segment: string): SceneDescription[] {
   return results;
 }
 
-/**
- * 将中文场景描述转为英文图片生成 prompt
- */
 function buildImagePrompt(scene: string, type: SceneDescription['type']): string {
   // 中立的类型提示，不假设故事时代背景；具体风格由 applyStylePrompt 叠加
   const typeHint: Record<SceneDescription['type'], string> = {
@@ -227,7 +216,7 @@ function enforceNoTextInPrompt(rawPrompt: string): string {
   p = p.replace(/[\u3000-\u303f\u3040-\u309f\u30a0-\u30ff\u3100-\u312f\u3200-\u32ff\u3400-\u4dbf\u4e00-\u9fff\uac00-\ud7af\uf900-\ufaff\uff00-\uffef]+/g, ' ');
 
   // 2. 剥掉所有成对的引号内容（中英引号）—— 这些最容易被当作"要渲染的文字"
-  p = p.replace(/["'“”‘’「」『』《》](.*?)["'“”‘’「」『』《』《》]/g, '$1');
+  p = p.replace(/["'""''「」『』《》](.*?)["'""''「」『』《』《》]/g, '$1');
 
   // 3. 压掉多余空白
   p = p.replace(/\s+/g, ' ').trim();
@@ -244,7 +233,7 @@ function enforceNoTextInPrompt(rawPrompt: string): string {
   return HEAD_DIRECTIVE + p;
 }
 
-// ─── 2.4 重试 & 降级机制 ─────────────────────────────────────────────
+// ─── 重试 & 降级机制 ──────────────────────────────────────────────────
 
 const MAX_RETRIES = 2;
 const RETRY_BASE_DELAY = 2000;
@@ -253,23 +242,20 @@ async function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-// ─── 2.5 图片本地缓存 ─────────────────────────────────────────────────
+// ─── 图片本地缓存 ─────────────────────────────────────────────────────
 
 const CACHE_DIR = join(process.cwd(), 'public', 'generated-images');
 
-/** 确保缓存目录存在 */
 async function ensureCacheDir(): Promise<void> {
   if (!existsSync(CACHE_DIR)) {
     await mkdir(CACHE_DIR, { recursive: true });
   }
 }
 
-/** 生成缓存文件名 */
 function cacheFilename(segmentId: string, index: number, ext: string): string {
   return `${segmentId}_${index}_${Date.now()}.${ext}`;
 }
 
-/** 将 Buffer 写入缓存目录，返回公开 URL 路径 */
 async function saveToCache(data: Buffer, filename: string): Promise<string> {
   await ensureCacheDir();
   const filepath = join(CACHE_DIR, filename);
@@ -367,10 +353,12 @@ export function analyzeStoryStyle(storyContent: string): {
   recommendedStyle: ConcreteImageStyle;
   reason: string;
   confidence: number;
+  allScores: { style: ImageStyle; score: number }[];
 } {
   const text = storyContent.slice(0, 2000);
+
   let bestScore = 0;
-  let bestRule = STYLE_RULES[STYLE_RULES.length - 1]; // 默认 ink-wash
+  let bestRule = STYLE_RULES[STYLE_RULES.length - 1];
 
   for (const rule of STYLE_RULES) {
     const score = countKeywordMatches(text, rule.keywords);
@@ -394,7 +382,29 @@ export function analyzeStoryStyle(storyContent: string): {
     recommendedStyle: bestRule.style,
     reason: bestRule.reason,
     confidence,
+    allScores: computeAllScores(text),
   };
+}
+
+/** 计算所有风格的匹配分数 */
+function computeAllScores(text: string): { style: ImageStyle; score: number }[] {
+  const allStyles: ImageStyle[] = [
+    'auto', 'historical-realistic', 'ink-wash', 'gongbi', 'dunhuang-mural',
+    'modern-realistic', 'sci-fi-cinematic', 'fantasy-epic', 'wuxia', 'anime', 'noir-thriller',
+  ];
+
+  return allStyles.map(style => {
+    let score = 0;
+    for (const rule of STYLE_RULES) {
+      if (rule.style === style) {
+        for (const kw of rule.keywords) {
+          score += text.split(kw).length - 1;
+        }
+        break;
+      }
+    }
+    return { style, score };
+  });
 }
 
 /**
@@ -439,13 +449,10 @@ export function analyzeSegmentStyle(
 // ─── 导出接口 ─────────────────────────────────────────────────────────
 
 export interface GenerateImagesOptions {
-  /** 段落 ID */
   segmentId: string;
-  /** 段落文本内容 */
   segmentContent: string;
   /** 图片风格（默认 auto：按 genre 自动选择） */
   style?: ImageStyle;
-  /** 最大生成数（默认 3） */
   maxImages?: number;
   /** 故事类型（用于 style=auto 时自动挑选风格） */
   genre?: string;
@@ -465,12 +472,6 @@ export interface GenerateImagesOptions {
 
 /**
  * 为一段故事生成插图
- *
- * 2.1 调用 OpenAI-compatible 图片生成 API
- * 2.2 从段落内容提取场景描述
- * 2.3 应用中国历史风格模板
- * 2.4 失败时返回占位图，不抛异常
- * 2.5 成功时将图片缓存到本地
  */
 export async function generateImagesForSegment(
   options: GenerateImagesOptions
@@ -478,7 +479,6 @@ export async function generateImagesForSegment(
   const { segmentId, segmentContent, style = 'auto', maxImages = 3, genre, storyDescription, callAIFn, characters, contextSummary, sceneStateEn, seed } = options;
   const config = getConfig();
 
-  // 未配置 API Key 时直接返回空，不报错
   if (!config.apiKey) {
     console.warn('[image-generator] 未配置 AI_IMAGE_API_KEY，跳过图片生成');
     return [];
@@ -511,6 +511,7 @@ export async function generateImagesForSegment(
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
       try {
         const imageData = await callImageAPI(styledPrompt, config, sceneSeed);
+
         let imageUrl: string;
 
         if ('b64_json' in imageData && imageData.b64_json) {

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import Link from 'next/link';
 import CharacterPanel from '@/components/CharacterPanel';
 import TimelineBar from '@/components/TimelineBar';
@@ -60,8 +60,8 @@ export default function StoryDetailPage({ params }: { params: { id: string } }) 
   const abortRef = useRef<AbortController | null>(null);
   // P6-2: 图片生成状态
   const [regeneratingImageForSeg, setRegeneratingImageForSeg] = useState<string | null>(null);
-  const [imageStyle, setImageStyle] = useState<ImageStyle>('auto');
-  const [styleRecommendation, setStyleRecommendation] = useState<{style: ConcreteImageStyle, reason: string} | null>(null);
+  const [imageStyle, setImageStyle] = useState<ImageStyle>('ink-wash');
+  const [styleRecommendation, setStyleRecommendation] = useState<{style: string, reason: string} | null>(null);
 
   const loadBranchSegments = useCallback(async (branchId: string) => {
     const segRes = await fetch(`/api/stories/${id}/segments?branchId=${branchId}`);
@@ -669,13 +669,8 @@ export default function StoryDetailPage({ params }: { params: { id: string } }) 
                               </button>
                             ))}
                           </div>
-                          {styleRecommendation && (
-                            <p className="text-[10px] text-[var(--muted)] mb-2 italic">
-                              💡 推荐画风：{IMAGE_STYLES.find(s => s.value === styleRecommendation.style)?.label || styleRecommendation.style}
-                              {imageStyle === 'auto' ? '（当前按自动模式生效）' : imageStyle === styleRecommendation.style ? '（当前已采用）' : ''}
-                              {' · '}
-                              {styleRecommendation.reason}
-                            </p>
+                          {styleRecommendation && imageStyle === styleRecommendation.style && (
+                            <p className="text-[10px] text-[var(--muted)] mb-2 italic">💡 {styleRecommendation.reason}</p>
                           )}
                           <StoryImageDisplay
                             segmentId={seg.id}

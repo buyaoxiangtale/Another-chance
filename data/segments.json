@@ -489,11 +489,13 @@
     "content": "《宇智波带土的重生》的故事开始了...",
     "isBranchPoint": false,
     "createdAt": "2026-04-17T04:58:46.668Z",
-    "updatedAt": "2026-04-17T04:58:46.668Z",
+    "updatedAt": "2026-04-20T05:14:17.706Z",
     "storyId": "story_1776401926668_wt100dv7t",
     "branchId": "main",
     "parentSegmentId": "",
-    "imageUrls": []
+    "imageUrls": [
+      "/generated-images/seg_1776401926668_7fpj7z8jb_0_1776662057704.png"
+    ]
   },
   {
     "id": "seg_1776401989217_0kp60y",
@@ -520,13 +522,13 @@
     "branchId": "main",
     "parentSegmentId": "seg_1776401989217_0kp60y",
     "imageUrls": [
-      "/generated-images/seg_1776402672928_dlkg2t_0_1776660710573.png",
-      "/generated-images/seg_1776402672928_dlkg2t_1_1776660738712.png",
-      "/generated-images/seg_1776402672928_dlkg2t_2_1776660768442.png"
+      "/generated-images/seg_1776402672928_dlkg2t_0_1776662073283.png",
+      "/generated-images/seg_1776402672928_dlkg2t_1_1776662102286.png",
+      "/generated-images/seg_1776402672928_dlkg2t_2_1776662132575.png"
     ],
     "narrativePace": "detailed",
     "createdAt": "2026-04-17T05:11:12.928Z",
-    "updatedAt": "2026-04-20T04:52:48.443Z"
+    "updatedAt": "2026-04-20T05:15:32.576Z"
   },
   {
     "id": "seg_1776403213420_1zmc68",
@@ -549,10 +551,12 @@
     "isBranchPoint": false,
     "branchId": "main",
     "parentSegmentId": "seg_1776403213420_1zmc68",
-    "imageUrls": [],
+    "imageUrls": [
+      "/generated-images/seg_1776403265084_yhdb9m_0_1776662107863.png"
+    ],
     "narrativePace": "detailed",
     "createdAt": "2026-04-17T05:21:05.084Z",
-    "updatedAt": "2026-04-17T05:21:05.084Z"
+    "updatedAt": "2026-04-20T05:15:07.864Z"
   },
   {
     "id": "seg_1776403330220_jf69ov",

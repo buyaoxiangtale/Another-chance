@@ -7,6 +7,14 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
+    "db:migrate": "prisma migrate dev",
+    "db:push": "prisma db push",
+    "db:seed": "prisma db seed",
+    "db:studio": "prisma studio",
+    "db:generate": "prisma generate",
+    "postinstall": "prisma generate",
+    "migrate:json": "tsx scripts/migrate-json-to-pg.ts",
+    "migrate:validate": "tsx scripts/validate-migration.ts",
     "cap:ios": "npx cap sync ios",
     "cap:android": "npx cap sync android",
     "cap:open:ios": "npx cap open ios",
@@ -17,22 +25,34 @@
     "mobile:build": "./scripts/build-mobile.sh",
     "mobile:run": "./scripts/run-mobile.sh"
   },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
+  },
   "dependencies": {
-    "better-sqlite3": "^12.8.0",
+    "@auth/prisma-adapter": "^2.11.2",
+    "@prisma/adapter-pg": "^7.7.0",
+    "@prisma/client": "^7.7.0",
+    "bcryptjs": "^3.0.3",
     "next": "13.4.19",
+    "next-auth": "^5.0.0-beta.31",
+    "pg": "^8.20.0",
     "react": "18.2.0",
     "react-dom": "18.2.0",
-    "sqlite3": "^6.0.1"
+    "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
     "@types/node": "^20",
+    "@types/pg": "^8.20.0",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
     "@vitest/coverage-v8": "1.6.1",
     "autoprefixer": "^10.4.27",
     "eslint": "8.57.1",
     "eslint-config-next": "13.4.19",
+    "prisma": "^7.7.0",
     "tailwindcss": "^3.4.0",
+    "tsx": "^4.21.0",
     "typescript": "^5",
     "vitest": "1.6.1"
   }

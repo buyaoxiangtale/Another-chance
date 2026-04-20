@@ -1,18 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { storiesStore, segmentsStore, branchesStore } from '@/lib/simple-db';
+import prisma from '@/lib/prisma';
+import { getUserIdFromRequest } from '@/lib/auth-helpers';
+import { canEditBranch, canViewStory } from '@/lib/permissions';
 
-/**
- * DELETE /api/stories/:id/branch/:branchId
- * 删除分支：
- *   1. 主线（branchId === 'main'）不可删除
- *   2. 级联删除该分支下所有段落（递归删除从该分支再分叉出去的子分支）
- *   3. 若源段落不再有任何分叉，重置其 isBranchPoint 标记
- */
 export async function DELETE(
-  _request: NextRequest,
-  { params }: { params: { id: string; branchId: string } }
+  request: NextRequest,
+  { params }: { params: { id: string; branchId: string } },
 ) {
   try {
+    const userId = await getUserIdFromRequest(request);
+    if (!userId) {
+      return NextResponse.json({ error: '请先登录' }, { status: 401 });
+    }
+
     const { id: storyId, branchId } = params;
 
     if (!storyId || !branchId) {
@@ -23,76 +23,71 @@ export async function DELETE(
       return NextResponse.json({ error: '主线不可删除' }, { status: 400 });
     }
 
-    const stories = await storiesStore.load();
-    const story = stories.find((s: any) => s.id === storyId);
+    const story = await prisma.story.findUnique({ where: { id: storyId } });
     if (!story) return NextResponse.json({ error: '故事不存在' }, { status: 404 });
 
-    const branches = await branchesStore.load();
-    const targetBranch = branches.find(b => b.id === branchId && b.storyId === storyId);
-    if (!targetBranch) {
+    const targetBranch = await prisma.storyBranch.findUnique({ where: { id: branchId } });
+    if (!targetBranch || targetBranch.storyId !== storyId) {
       return NextResponse.json({ error: '分支不存在' }, { status: 404 });
     }
 
-    // 1. 收集所有需要删除的分支 id（递归：当前分支 + 任何以本分支段落为源的子分支）
-    const segments = await segmentsStore.load();
-    const branchesToDelete = new Set<string>([branchId]);
+    if (!canEditBranch(targetBranch, userId)) {
+      return NextResponse.json({ error: '无权删除分支' }, { status: 403 });
+    }
 
+    // Collect all branches to delete (recursive)
+    const allBranches = await prisma.storyBranch.findMany({ where: { storyId } });
+    const allSegments = await prisma.storySegment.findMany({ where: { storyId } });
+
+    const branchesToDelete = new Set<string>([branchId]);
     let changed = true;
     while (changed) {
       changed = false;
-      const segmentsInDeletedBranches = segments.filter(
-        s => s.storyId === storyId && branchesToDelete.has(s.branchId)
+      const segIds = new Set(
+        allSegments
+          .filter((s) => branchesToDelete.has(s.branchId))
+          .map((s) => s.id),
       );
-      const segIds = new Set(segmentsInDeletedBranches.map(s => s.id));
-      for (const b of branches) {
-        if (
-          b.storyId === storyId &&
-          !branchesToDelete.has(b.id) &&
-          segIds.has(b.sourceSegmentId)
-        ) {
+      for (const b of allBranches) {
+        if (!branchesToDelete.has(b.id) && segIds.has(b.sourceSegmentId)) {
           branchesToDelete.add(b.id);
           changed = true;
         }
       }
     }
 
-    // 2. 删除上述分支的所有段落
-    const remainingSegments = segments.filter(
-      s => !(s.storyId === storyId && branchesToDelete.has(s.branchId))
-    );
+    // Delete segments in those branches
+    const deletedSegments = await prisma.storySegment.deleteMany({
+      where: { storyId, branchId: { in: Array.from(branchesToDelete) } },
+    });
 
-    // 3. 删除分支记录
-    const remainingBranches = branches.filter(
-      b => !(b.storyId === storyId && branchesToDelete.has(b.id))
-    );
+    // Delete branch records
+    const deletedBranches = await prisma.storyBranch.deleteMany({
+      where: { storyId, id: { in: Array.from(branchesToDelete) } },
+    });
 
-    // 4. 若源段落不再有任何分叉，重置 isBranchPoint
-    const sourceSegmentId = targetBranch.sourceSegmentId;
-    const stillHasBranches = remainingBranches.some(
-      b => b.storyId === storyId && b.sourceSegmentId === sourceSegmentId
-    );
-    if (!stillHasBranches) {
-      const sourceSeg = remainingSegments.find(s => s.id === sourceSegmentId);
-      if (sourceSeg && sourceSeg.isBranchPoint) {
-        sourceSeg.isBranchPoint = false;
-        sourceSeg.updatedAt = new Date().toISOString();
-      }
+    // Check if source segment still has branches
+    const remainingBranches = await prisma.storyBranch.findMany({
+      where: { storyId, sourceSegmentId: targetBranch.sourceSegmentId },
+    });
+    if (remainingBranches.length === 0) {
+      await prisma.storySegment.update({
+        where: { id: targetBranch.sourceSegmentId },
+        data: { isBranchPoint: false, updatedAt: new Date() },
+      }).catch(() => {});
     }
-
-    await segmentsStore.save(remainingSegments);
-    await branchesStore.save(remainingBranches);
 
     return NextResponse.json({
       success: true,
       deletedBranchIds: Array.from(branchesToDelete),
-      deletedSegmentCount: segments.length - remainingSegments.length,
+      deletedSegmentCount: deletedSegments.count,
       message: '分支删除成功',
     });
   } catch (error) {
     console.error('删除分支失败:', error);
     return NextResponse.json(
-      { error: '删除分支失败', details: error instanceof Error ? error.message : '未知错误' },
-      { status: 500 }
+      { error: '删除分支失败' },
+      { status: 500 },
     );
   }
 }

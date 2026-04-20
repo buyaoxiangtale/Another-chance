@@ -2,65 +2,56 @@
  * 5.7 DirectorState 持久化
  */
 
-import type { DirectorState } from '@/types/story';
-import { SimpleStore } from './simple-db';
-
-const directorStore = new SimpleStore<DirectorState>('director-state.json');
+import prisma from '@/lib/prisma';
 
 export class DirectorManager {
   /**
    * 获取故事的导演状态
    */
-  async getState(storyId: string): Promise<DirectorState | null> {
-    const all = await directorStore.load();
-    return all.find(s => s.storyId === storyId) || null;
+  async getState(storyId: string) {
+    return prisma.directorState.findUnique({ where: { storyId } });
   }
 
   /**
    * 获取或创建导演状态
    */
-  async getOrCreate(storyId: string): Promise<DirectorState> {
+  async getOrCreate(storyId: string) {
     const existing = await this.getState(storyId);
     if (existing) return existing;
 
-    const state: DirectorState = {
-      id: `dir_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-      storyId,
-      characterStates: {},
-      worldVariables: {},
-      activeConstraints: [],
-      updatedAt: new Date().toISOString(),
-    };
-
-    const all = await directorStore.load();
-    all.push(state);
-    await directorStore.save(all);
-    return state;
+    return prisma.directorState.create({
+      data: {
+        id: `dir_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+        storyId,
+        characterStates: {},
+        worldVariables: {},
+        activeConstraints: [],
+      },
+    });
   }
 
   /**
    * 更新导演状态
    */
-  async updateState(storyId: string, updates: Partial<DirectorState>): Promise<DirectorState | null> {
-    const all = await directorStore.load();
-    const idx = all.findIndex(s => s.storyId === storyId);
-    if (idx === -1) return null;
+  async updateState(storyId: string, updates: any) {
+    const existing = await prisma.directorState.findUnique({ where: { storyId } });
+    if (!existing) return null;
 
-    const current = all[idx];
+    const data: any = { updatedAt: new Date() };
     if (updates.characterStates) {
-      current.characterStates = { ...current.characterStates, ...updates.characterStates };
+      data.characterStates = { ...(existing.characterStates as any), ...updates.characterStates };
     }
     if (updates.worldVariables) {
-      current.worldVariables = { ...current.worldVariables, ...updates.worldVariables };
+      data.worldVariables = { ...(existing.worldVariables as any), ...updates.worldVariables };
     }
     if (updates.activeConstraints) {
-      current.activeConstraints = updates.activeConstraints;
+      data.activeConstraints = updates.activeConstraints;
     }
-    current.updatedAt = new Date().toISOString();
 
-    all[idx] = current;
-    await directorStore.save(all);
-    return current;
+    return prisma.directorState.update({
+      where: { storyId },
+      data,
+    });
   }
 
   /**
@@ -71,24 +62,27 @@ export class DirectorManager {
     if (!state) return '';
 
     const parts: string[] = [];
+    const charStates = state.characterStates as Record<string, string> || {};
 
-    if (Object.keys(state.characterStates).length > 0) {
+    if (Object.keys(charStates).length > 0) {
       parts.push('【导演指定角色状态】');
-      for (const [charId, charState] of Object.entries(state.characterStates)) {
+      for (const [charId, charState] of Object.entries(charStates)) {
         parts.push(`- 角色 ${charId}：${charState}`);
       }
     }
 
-    if (Object.keys(state.worldVariables).length > 0) {
+    const worldVars = state.worldVariables as Record<string, string> || {};
+    if (Object.keys(worldVars).length > 0) {
       parts.push('【导演指定世界变量】');
-      for (const [key, value] of Object.entries(state.worldVariables)) {
+      for (const [key, value] of Object.entries(worldVars)) {
         parts.push(`- ${key}：${value}`);
       }
     }
 
-    if (state.activeConstraints.length > 0) {
+    const constraints = state.activeConstraints as string[] || [];
+    if (constraints.length > 0) {
       parts.push('【创作约束】');
-      for (const constraint of state.activeConstraints) {
+      for (const constraint of constraints) {
         parts.push(`- ${constraint}`);
       }
     }

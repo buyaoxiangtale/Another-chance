@@ -1,21 +1,32 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { segmentsStore, getOrderedChain, getStorySegments, type StorySegment } from '@/lib/simple-db';
+import prisma from '@/lib/prisma';
+import { getUserIdFromRequest } from '@/lib/auth-helpers';
+import { canViewStory, canEditStory } from '@/lib/permissions';
+import { getOrderedChain } from '@/lib/chain-helpers';
 
-/**
- * GET /api/stories/[id]/segments?branchId=main&all=true
- * 获取段落列表
- */
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: { id: string } },
 ) {
   try {
+    const userId = await getUserIdFromRequest(request);
     const { searchParams } = new URL(request.url);
     const branchId = searchParams.get('branchId') || 'main';
     const all = searchParams.get('all');
 
+    const story = await prisma.story.findUnique({ where: { id: params.id } });
+    if (!story) {
+      return NextResponse.json({ error: '故事不存在' }, { status: 404 });
+    }
+    if (!canViewStory(story, userId ?? undefined)) {
+      return NextResponse.json({ error: '无权查看' }, { status: 403 });
+    }
+
     if (all) {
-      const segments = await getStorySegments(params.id);
+      const segments = await prisma.storySegment.findMany({
+        where: { storyId: params.id },
+        orderBy: { createdAt: 'asc' },
+      });
       return NextResponse.json({ success: true, segments });
     }
 
@@ -23,22 +34,20 @@ export async function GET(
     return NextResponse.json({ success: true, segments, branchId });
   } catch (error) {
     console.error('获取段落失败:', error);
-    return NextResponse.json({ 
-      error: '获取段落失败',
-      details: error instanceof Error ? error.message : '未知错误'
-    }, { status: 500 });
+    return NextResponse.json({ error: '获取段落失败' }, { status: 500 });
   }
 }
 
-/**
- * PATCH /api/stories/[id]/segments?segmentId=xxx
- * 编辑段落内容
- */
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: { id: string } },
 ) {
   try {
+    const userId = await getUserIdFromRequest(request);
+    if (!userId) {
+      return NextResponse.json({ error: '请先登录' }, { status: 401 });
+    }
+
     const { searchParams } = new URL(request.url);
     const segmentId = searchParams.get('segmentId');
     const body = await request.json();
@@ -48,36 +57,44 @@ export async function PATCH(
       return NextResponse.json({ error: '缺少 segmentId 参数' }, { status: 400 });
     }
 
-    const segments = await segmentsStore.load();
-    const idx = segments.findIndex((s: any) => s.id === segmentId && s.storyId === params.id);
-    if (idx === -1) {
+    const story = await prisma.story.findUnique({ where: { id: params.id } });
+    if (!story || !canEditStory(story, userId)) {
+      return NextResponse.json({ error: '无权编辑' }, { status: 403 });
+    }
+
+    const segment = await prisma.storySegment.findUnique({ where: { id: segmentId } });
+    if (!segment || segment.storyId !== params.id) {
       return NextResponse.json({ error: '段落不存在' }, { status: 404 });
     }
 
-    // 只更新传入的字段
-    if (content !== undefined) segments[idx].content = content;
-    if (title !== undefined) segments[idx].title = title;
-    if (mood !== undefined) segments[idx].mood = mood;
-    if (narrativePace !== undefined) segments[idx].narrativePace = narrativePace;
-    segments[idx].updatedAt = new Date().toISOString();
+    const data: any = { updatedAt: new Date() };
+    if (content !== undefined) data.content = content;
+    if (title !== undefined) data.title = title;
+    if (mood !== undefined) data.mood = mood;
+    if (narrativePace !== undefined) data.narrativePace = narrativePace;
 
-    await segmentsStore.save(segments);
-    return NextResponse.json({ success: true, segment: segments[idx] });
+    const updated = await prisma.storySegment.update({
+      where: { id: segmentId },
+      data,
+    });
+
+    return NextResponse.json({ success: true, segment: updated });
   } catch (error) {
     console.error('更新段落失败:', error);
     return NextResponse.json({ error: '更新段落失败' }, { status: 500 });
   }
 }
 
-/**
- * DELETE /api/stories/[id]/segments?segmentId=xxx
- * 删除段落，后续段落重新链接到被删除段落的父段落
- */
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: { id: string } },
 ) {
   try {
+    const userId = await getUserIdFromRequest(request);
+    if (!userId) {
+      return NextResponse.json({ error: '请先登录' }, { status: 401 });
+    }
+
     const { searchParams } = new URL(request.url);
     const segmentId = searchParams.get('segmentId');
 
@@ -85,40 +102,34 @@ export async function DELETE(
       return NextResponse.json({ error: '缺少 segmentId 参数' }, { status: 400 });
     }
 
-    const segments = await segmentsStore.load();
-    const idx = segments.findIndex((s: any) => s.id === segmentId && s.storyId === params.id);
-    if (idx === -1) {
+    const story = await prisma.story.findUnique({ where: { id: params.id } });
+    if (!story || !canEditStory(story, userId)) {
+      return NextResponse.json({ error: '无权编辑' }, { status: 403 });
+    }
+
+    const segment = await prisma.storySegment.findUnique({ where: { id: segmentId } });
+    if (!segment || segment.storyId !== params.id) {
       return NextResponse.json({ error: '段落不存在' }, { status: 404 });
     }
 
-    const deletedSegment = segments[idx];
-    const deletedParentId = deletedSegment.parentSegmentId;
-
-    // 不允许删除根段落（故事开篇）
-    if (!deletedParentId) {
+    if (!segment.parentSegmentId) {
       return NextResponse.json({ error: '不能删除故事开篇段落' }, { status: 400 });
     }
 
-    // 将后续段落的 parentSegmentId 重新链接到被删除段落的父段落
-    let relinkedCount = 0;
-    for (const seg of segments) {
-      if (seg.parentSegmentId === segmentId) {
-        seg.parentSegmentId = deletedParentId;
-        seg.updatedAt = new Date().toISOString();
-        relinkedCount++;
-      }
-    }
+    // Relink children to parent
+    const relinked = await prisma.storySegment.updateMany({
+      where: { parentSegmentId: segmentId },
+      data: { parentSegmentId: segment.parentSegmentId, updatedAt: new Date() },
+    });
 
-    // 删除目标段落
-    segments.splice(idx, 1);
-    await segmentsStore.save(segments);
+    await prisma.storySegment.delete({ where: { id: segmentId } });
 
     return NextResponse.json({
       success: true,
-      message: `段落已删除，${relinkedCount} 个后续段落已重新链接`,
+      message: `段落已删除，${relinked.count} 个后续段落已重新链接`,
       deletedSegmentId: segmentId,
-      relinkedTo: deletedParentId,
-      relinkedCount,
+      relinkedTo: segment.parentSegmentId,
+      relinkedCount: relinked.count,
     });
   } catch (error) {
     console.error('删除段落失败:', error);

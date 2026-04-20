@@ -3,7 +3,7 @@
  * 统一管理 temperature、top_p、frequency_penalty 等参数
  */
 
-import { type Story } from '@/lib/simple-db';
+import { type Story } from '@/lib/prisma';
 import { FICTION_KEYWORDS } from './genre-config';
 
 /**

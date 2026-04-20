@@ -1,4 +1,4 @@
-import { segmentsStore, branchesStore, getOrderedChain } from './simple-db';
+import { getOrderedChain } from '@/lib/chain-helpers';
 import type { StorySegment, TimelineEvent } from '../types/story';
 
 type TimelineViolation = {
@@ -23,7 +23,6 @@ type TimelineContext = {
 class TimelineEngine {
   /**
    * 校验段落链的时间单调性
-   * 时间必须严格递增（同一年份不允许出现季节回退）
    */
   async validateTimeline(storyId: string, branchId: string): Promise<TimelineViolation[]> {
     const chain = await getOrderedChain(storyId, branchId);
@@ -33,13 +32,12 @@ class TimelineEngine {
       const prev = chain[i - 1];
       const curr = chain[i];
 
-      if (!prev.timeline && !curr.timeline) continue;
-      if (!prev.timeline || !curr.timeline) continue;
+      const prevT = (prev as any).timeline;
+      const currT = (curr as any).timeline;
 
-      const prevT = prev.timeline;
-      const currT = curr.timeline;
+      if (!prevT && !currT) continue;
+      if (!prevT || !currT) continue;
 
-      // 年份必须递增
       if (currT.year < prevT.year) {
         violations.push({
           segmentId: curr.id,
@@ -51,7 +49,6 @@ class TimelineEngine {
         continue;
       }
 
-      // 同一年份时，季节不允许回退
       if (currT.year === prevT.year && prevT.season && currT.season) {
         const seasonOrder = ['春', '夏', '秋', '冬'];
         const prevIdx = seasonOrder.indexOf(prevT.season);
@@ -71,14 +68,11 @@ class TimelineEngine {
     return violations;
   }
 
-  /**
-   * 获取当前时间点附近的历史事件上下文
-   */
   async getTimelineContext(storyId: string, branchId: string, currentSegmentId: string): Promise<TimelineContext> {
     const chain = await getOrderedChain(storyId, branchId);
     const events: (TimelineEvent & { segmentId: string })[] = chain
-      .filter(s => s.timeline)
-      .map(s => ({ ...s.timeline!, segmentId: s.id }));
+      .filter(s => (s as any).timeline)
+      .map(s => ({ ...(s as any).timeline, segmentId: s.id }));
 
     const currentIndex = events.findIndex(e => e.segmentId === currentSegmentId);
 
@@ -90,14 +84,11 @@ class TimelineEngine {
     };
   }
 
-  /**
-   * 获取完整时间轴（所有段落的事件列表）
-   */
   async getTimeline(storyId: string, branchId: string): Promise<(TimelineEvent & { segmentId: string })[]> {
     const chain = await getOrderedChain(storyId, branchId);
     return chain
-      .filter(s => s.timeline)
-      .map(s => ({ ...s.timeline!, segmentId: s.id }));
+      .filter(s => (s as any).timeline)
+      .map(s => ({ ...(s as any).timeline, segmentId: s.id }));
   }
 }
 
@@ -113,9 +104,6 @@ type LorebookEntry = {
   tags?: string[];
 };
 
-/**
- * 将时间轴和世界观信息格式化为中文 AI prompt 片段
- */
 export function buildTimelinePrompt(
   events: (import('../types/story').TimelineEvent & { segmentId?: string })[],
   lorebookEntries: LorebookEntry[]
@@ -137,7 +125,6 @@ export function buildTimelinePrompt(
     lines.push('');
     lines.push('## 世界观设定');
 
-    // 按 topic 分组
     const grouped = new Map<string, LorebookEntry[]>();
     for (const entry of lorebookEntries) {
       const list = grouped.get(entry.topic) || [];

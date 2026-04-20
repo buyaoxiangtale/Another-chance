@@ -16,6 +16,7 @@ interface Story {
   era?: string;
   genre?: string;
   characterIds?: string[];
+  visibility?: string;
 }
 
 export default function StoryDetailPage({ params }: { params: { id: string } }) {
@@ -41,7 +42,7 @@ export default function StoryDetailPage({ params }: { params: { id: string } }) 
   const [showDirectorSidebar, setShowDirectorSidebar] = useState(false);
   const [showTimeline, setShowTimeline] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
-  const [editForm, setEditForm] = useState({ title: '', description: '', genre: '', era: '', author: '' });
+  const [editForm, setEditForm] = useState({ title: '', description: '', genre: '', era: '', author: '', visibility: 'PRIVATE' });
   const [saving, setSaving] = useState(false);
   // 段落编辑/删除
   const [editingSegmentId, setEditingSegmentId] = useState<string | null>(null);
@@ -91,6 +92,7 @@ export default function StoryDetailPage({ params }: { params: { id: string } }) 
           genre: sData.story.genre || '',
           era: sData.story.era || '',
           author: sData.story.author || '',
+          visibility: sData.story.visibility || 'PRIVATE',
         });
         setBranches(treeData.branches || []);
         setCurrentBranchId('main');
@@ -763,7 +765,7 @@ export default function StoryDetailPage({ params }: { params: { id: string } }) 
       {/* 编辑故事信息弹窗 */}
       {showEditModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setShowEditModal(false)}>
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md mx-4 p-6" onClick={e => e.stopPropagation()}>
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md mx-4 p-6 max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             <h2 className="text-lg font-bold text-[var(--ink)] mb-4">编辑故事信息</h2>
             <div className="space-y-4">
               <div>
@@ -826,6 +828,18 @@ export default function StoryDetailPage({ params }: { params: { id: string } }) 
                   onChange={e => setEditForm(f => ({ ...f, author: e.target.value }))}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none"
                 />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">可见性</label>
+                <select
+                  value={editForm.visibility}
+                  onChange={e => setEditForm(f => ({ ...f, visibility: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none"
+                >
+                  <option value="PRIVATE">🔒 私有 — 仅自己可见</option>
+                  <option value="UNLISTED">🔗 隐链 — 有链接即可访问</option>
+                  <option value="PUBLIC">🌐 公开 — 所有人可见</option>
+                </select>
               </div>
             </div>
             <div className="flex justify-end gap-3 mt-6">

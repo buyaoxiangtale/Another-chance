@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useSession } from 'next-auth/react';
 
 interface Story {
   id: string;
@@ -18,15 +19,17 @@ interface Story {
     userDirection: string;
     createdAt: string;
   };
-  // C6.8: new fields from API
   era?: string;
   genre?: string;
   characterCount?: number;
+  visibility?: string;
+  ownerId?: string;
 }
 
-function StoryCard({ story, index, onDelete }: { story: Story; index: number; onDelete: (id: string) => void }) {
+function StoryCard({ story, index, onDelete, currentUserId }: { story: Story; index: number; onDelete: (id: string) => void; currentUserId?: string }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const isOwner = currentUserId && story.ownerId === currentUserId;
 
   const handleDelete = async (e: React.MouseEvent) => {
     e.preventDefault();
@@ -132,8 +135,8 @@ function StoryCard({ story, index, onDelete }: { story: Story; index: number; on
             )}
           </div>
 
-          {/* C6.8: Era & genre tags */}
-          {(story.era || story.genre) && (
+          {/* Era, genre, and visibility tags */}
+          {(story.era || story.genre || story.visibility) && (
             <div className="flex items-center gap-2 mb-4">
               {story.era && (
                 <span className="text-[10px] px-2 py-0.5 bg-blue-50 text-blue-600 rounded-full border border-blue-200">
@@ -143,6 +146,21 @@ function StoryCard({ story, index, onDelete }: { story: Story; index: number; on
               {story.genre && (
                 <span className="text-[10px] px-2 py-0.5 bg-purple-50 text-purple-600 rounded-full border border-purple-200">
                   {story.genre}
+                </span>
+              )}
+              {story.visibility === 'PRIVATE' && (
+                <span className="text-[10px] px-2 py-0.5 bg-gray-100 text-gray-500 rounded-full border border-gray-200">
+                  🔒 私有
+                </span>
+              )}
+              {story.visibility === 'UNLISTED' && (
+                <span className="text-[10px] px-2 py-0.5 bg-yellow-50 text-yellow-600 rounded-full border border-yellow-200">
+                  🔗 隐链
+                </span>
+              )}
+              {story.visibility === 'PUBLIC' && (
+                <span className="text-[10px] px-2 py-0.5 bg-green-50 text-green-600 rounded-full border border-green-200">
+                  🌐 公开
                 </span>
               )}
             </div>
@@ -191,9 +209,11 @@ function LoadingSkeleton() {
 }
 
 export default function Home() {
+  const { data: session, status: sessionStatus } = useSession();
   const [stories, setStories] = useState<Story[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [tab, setTab] = useState<'all' | 'mine'>('all');
 
   const handleDeleteStory = (storyId: string) => {
     setStories(prev => prev.filter(s => s.id !== storyId));
@@ -279,6 +299,22 @@ export default function Home() {
         <div className="flex items-center gap-4 mb-8">
           <h2 className="text-2xl font-bold text-[var(--ink)] tracking-wide">故事长卷</h2>
           <div className="flex-1 h-px bg-gradient-to-r from-[var(--border)] to-transparent" />
+          {session?.user && (
+            <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
+              <button
+                onClick={() => setTab('all')}
+                className={`px-3 py-1 text-sm rounded-md transition-colors ${tab === 'all' ? 'bg-white text-[var(--ink)] shadow-sm' : 'text-[var(--muted)] hover:text-[var(--ink)]'}`}
+              >
+                全部
+              </button>
+              <button
+                onClick={() => setTab('mine')}
+                className={`px-3 py-1 text-sm rounded-md transition-colors ${tab === 'mine' ? 'bg-white text-[var(--ink)] shadow-sm' : 'text-[var(--muted)] hover:text-[var(--ink)]'}`}
+              >
+                我的故事
+              </button>
+            </div>
+          )}
         </div>
 
         {loading && <LoadingSkeleton />}
@@ -298,13 +334,24 @@ export default function Home() {
           </div>
         )}
 
-        {!loading && !error && stories.length > 0 && (
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-            {stories.map((story, i) => (
-              <StoryCard key={story.id} story={story} index={i} onDelete={handleDeleteStory} />
-            ))}
-          </div>
-        )}
+        {!loading && !error && (() => {
+          const filtered = tab === 'mine' && session?.user?.id
+            ? stories.filter(s => s.ownerId === session.user.id)
+            : stories;
+          return filtered.length > 0 ? (
+            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+              {filtered.map((story, i) => (
+                <StoryCard key={story.id} story={story} index={i} onDelete={handleDeleteStory} currentUserId={session?.user?.id} />
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-16">
+              <p className="text-4xl mb-4">📜</p>
+              <p className="text-[var(--muted)] mb-4">{tab === 'mine' ? '你还没有创建故事' : '暂无故事，开启你的第一段历史旅程'}</p>
+              <Link href="/create" className="text-[var(--gold)] hover:underline">创建第一个故事 →</Link>
+            </div>
+          );
+        })()}
       </div>
 
       <footer className="border-t border-[var(--border)] py-8 text-center">

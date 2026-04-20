@@ -1,12 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server';
+import prisma from '@/lib/prisma';
+import { getUserIdFromRequest } from '@/lib/auth-helpers';
+import { canViewStory, canEditStory } from '@/lib/permissions';
 import { characterManager } from '@/lib/character-engine';
 
-export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(
+  request: NextRequest,
+  { params }: { params: { id: string } },
+) {
   try {
+    const userId = await getUserIdFromRequest(request);
     const { id: storyId } = params;
     const { searchParams } = new URL(request.url);
     const branchId = searchParams.get('branchId');
     const segmentId = searchParams.get('segmentId');
+
+    const story = await prisma.story.findUnique({ where: { id: storyId } });
+    if (!story) return NextResponse.json({ error: '故事不存在' }, { status: 404 });
+
+    if (!canViewStory(story, userId ?? undefined)) {
+      return NextResponse.json({ error: '无权查看' }, { status: 403 });
+    }
 
     if (branchId && segmentId) {
       const context = await characterManager.getCharacterContext(storyId, branchId, segmentId);
@@ -25,9 +39,24 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
   }
 }
 
-export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(
+  request: NextRequest,
+  { params }: { params: { id: string } },
+) {
   try {
+    const userId = await getUserIdFromRequest(request);
+    if (!userId) {
+      return NextResponse.json({ error: '请先登录' }, { status: 401 });
+    }
+
     const { id: storyId } = params;
+    const story = await prisma.story.findUnique({ where: { id: storyId } });
+    if (!story) return NextResponse.json({ error: '故事不存在' }, { status: 404 });
+
+    if (!canEditStory(story, userId)) {
+      return NextResponse.json({ error: '无权编辑' }, { status: 403 });
+    }
+
     const body = await request.json();
     const character = await characterManager.create(body);
     return NextResponse.json(character, { status: 201 });
@@ -36,9 +65,24 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
   }
 }
 
-export async function PATCH(request: NextRequest, { params }: { params: { id: string } }) {
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: { id: string } },
+) {
   try {
+    const userId = await getUserIdFromRequest(request);
+    if (!userId) {
+      return NextResponse.json({ error: '请先登录' }, { status: 401 });
+    }
+
     const { id: storyId } = params;
+    const story = await prisma.story.findUnique({ where: { id: storyId } });
+    if (!story) return NextResponse.json({ error: '故事不存在' }, { status: 404 });
+
+    if (!canEditStory(story, userId)) {
+      return NextResponse.json({ error: '无权编辑' }, { status: 403 });
+    }
+
     const body = await request.json();
     const { characterId, ...updates } = body;
     if (!characterId) {

@@ -3,16 +3,9 @@
  * 管理跨分支的记忆，让 AI 在续写时了解其他分支发生了什么
  */
 
-import {
-  branchesStore,
-  segmentsStore,
-  getOrderedChain,
-  getStoryBranches,
-  getStorySegments,
-  summariesStore,
-  type StorySegment,
-  type StoryBranch,
-} from './simple-db';
+import { getOrderedChain } from '@/lib/chain-helpers';
+import prisma from '@/lib/prisma';
+import type { StorySegment, StoryBranch } from '@/lib/prisma';
 
 /**
  * 找到两个分支的分叉点
@@ -33,7 +26,7 @@ async function findDivergencePoint(
   // chain1 和 chain2 各自的 parent 链: 从第一个 segment 开始回溯 parentSegmentId
   const buildAncestorChain = async (startSegment: StorySegment): Promise<StorySegment[]> => {
     const ancestors: StorySegment[] = [];
-    const allSegments = await segmentsStore.load();
+    const allSegments = await prisma.storySegment.findMany({ where: { storyId } });
     let current: StorySegment | undefined = startSegment;
 
     while (current) {
@@ -65,8 +58,7 @@ async function getAlternateBranchSummaries(
   storyId: string,
   currentBranchId: string
 ): Promise<Array<{ branch: StoryBranch; summary: string; segmentCount: number }>> {
-  const branches = await getStoryBranches(storyId);
-  const summaries = await summariesStore.load();
+  const branches = await prisma.storyBranch.findMany({ where: { storyId } });
   const result: Array<{ branch: StoryBranch; summary: string; segmentCount: number }> = [];
 
   for (const branch of branches) {
@@ -75,16 +67,15 @@ async function getAlternateBranchSummaries(
     const chain = await getOrderedChain(storyId, branch.id);
     if (chain.length === 0) continue;
 
-    // 尝试获取该分支的摘要（取最新的摘要）
+    // 尝试获取该分支最后一段的摘要
     const lastSegment = chain[chain.length - 1];
-    const branchSummaries = summaries.filter(
-      (s: any) => s.segmentId === lastSegment.id
-    );
+    const branchSummary = await prisma.segmentSummary.findFirst({
+      where: { segmentId: lastSegment.id, branchId: branch.id },
+    });
 
     let summaryText = '';
-    if (branchSummaries.length > 0) {
-      const latest = branchSummaries[branchSummaries.length - 1];
-      summaryText = latest.summary || latest.content || '';
+    if (branchSummary) {
+      summaryText = branchSummary.summary || '';
     }
 
     // 如果没有摘要，用分支描述 + 最后一段的内容前200字作为简要摘要
@@ -111,7 +102,7 @@ async function syncSharedCharacterStates(
   storyId: string,
   branchId: string
 ): Promise<Record<string, any> | null> {
-  const branches = await getStoryBranches(storyId);
+  const branches = await prisma.storyBranch.findMany({ where: { storyId } });
   const currentBranch = branches.find(b => b.id === branchId);
   if (!currentBranch) return null;
 
@@ -121,14 +112,13 @@ async function syncSharedCharacterStates(
   if (!sourceSegmentId) return null;
 
   // 查找源段落
-  const segments = await segmentsStore.load();
-  const sourceSegment = segments.find(s => s.id === sourceSegmentId);
+  const sourceSegment = await prisma.storySegment.findUnique({ where: { id: sourceSegmentId } });
   if (!sourceSegment) return null;
 
   // 获取分叉点的角色状态
   // 从分支的 characterStateSnapshot 获取（如果创建分支时保存了）
-  const branchState = currentBranch.characterStateSnapshot;
-  if (branchState) return branchState;
+  const branchState = currentBranch.characterStateSnapshot as Record<string, any> | null;
+  if (branchState && typeof branchState === 'object' && !Array.isArray(branchState)) return branchState;
 
   // 回退：查看源段落中的角色信息
   if (sourceSegment.characterIds && sourceSegment.characterIds.length > 0) {
@@ -150,7 +140,7 @@ async function buildBranchMemoryPrompt(
   storyId: string,
   currentBranchId: string
 ): Promise<string> {
-  const branches = await getStoryBranches(storyId);
+  const branches = await prisma.storyBranch.findMany({ where: { storyId } });
   if (branches.length <= 1) return ''; // 只有主分支，无需分支记忆
 
   const lines: string[] = [];

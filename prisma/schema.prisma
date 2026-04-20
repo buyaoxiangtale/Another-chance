@@ -1,139 +1,238 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "sqlite"
-  url      = "file:./dev.db"
+  provider = "postgresql"
 }
 
-// 故事主线模型
+// ========== 枚举 ==========
+
+enum Visibility {
+  PRIVATE
+  PUBLIC
+  UNLISTED
+}
+
+// ========== Auth.js 标准四表 ==========
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String?
+  passwordHash String
+  image        String?
+  isAdmin      Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  accounts     Account[]
+  sessions     Session[]
+  stories      Story[]
+  branches     StoryBranch[]
+
+  @@map("users")
+}
+
+model Account {
+  id                String @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
+}
+
+// ========== 业务模型 ==========
+
 model Story {
-  id              String   @id @default(cuid())
-  title           String
-  description     String?
-  author          String?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  
-  // C1: 1.6 扩展
-  era             String?
-  genre           String?
-  
-  // 关联关系
-  segments        StorySegment[]
-  branches        StoryBranch[]
-  characters      Character[]
-  rootSegment     StorySegment? @relation("StoryRoot", fields: [rootSegmentId], references: [id])
-  
-  rootSegmentId   String?
-  
+  id            String     @id @default(cuid())
+  title         String
+  description   String?
+  author        String?
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+  rootSegmentId String?  @unique
+  era           String?
+  genre         String?
+
+  ownerId       String
+  owner         User       @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  visibility    Visibility @default(PRIVATE)
+  publishedAt   DateTime?
+
+  segments      StorySegment[]
+  branches      StoryBranch[]
+  characters    Character[]
+  rootSegment   StorySegment?  @relation("StoryRoot", fields: [rootSegmentId], references: [id])
+  directorStates DirectorState[]
+  events        KeyEvent[]
+
+  @@index([visibility, publishedAt])
+  @@index([ownerId])
   @@map("stories")
 }
 
-// 故事段落模型
 model StorySegment {
-  id          String   @id @default(cuid())
-  title       String?
-  content     String
-  order       Int      @default(0)
-  isBranchPoint Boolean @default(false)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  
-  // 关联关系
-  storyId     String
-  story       Story    @relation(fields: [storyId], references: [id], onDelete: Cascade)
-  
-  // 分叉关联
-  branches    StoryBranch[]
-  parentBranchId String?
-  
-  // 图片预留字段
-  imageUrls   String[] @default([])
-  
-  // C1: 1.5 扩展
-  timeline    String?   // JSON string of TimelineEvent
-  characterIds String[] @default([])
-  narrativePace String? // rush/detailed/pause/summary
-  mood        String?
-  
-  // C1: 1.10 历史引用关联
-  historicalReferences StorySegmentHistoricalRef[]
-  
+  id                  String     @id @default(cuid())
+  title               String?
+  content             String     @db.Text
+  isBranchPoint       Boolean    @default(false)
+  createdAt           DateTime   @default(now())
+  updatedAt           DateTime   @updatedAt
+  storyId             String
+  story               Story      @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  branchId            String
+  parentSegmentId     String?
+  imageUrls           String[]   @default([])
+  timeline            Json?
+  historicalReferences Json?
+  narrativePace       String?
+  mood                String?
+  characterIds        String[]   @default([])
+  visibility          Visibility @default(PRIVATE)
+
+  // 反向关联
+  rootOfStory         Story?          @relation("StoryRoot")
+  branchSourceOf      StoryBranch[]   @relation("BranchSource")
+
+  summaries           SegmentSummary[]
+
+  @@index([storyId, branchId])
+  @@index([storyId])
+  @@index([branchId])
   @@map("story_segments")
 }
 
-// 分叉节点模型
 model StoryBranch {
-  id          String   @id @default(cuid())
-  title       String?
-  description String?
-  segmentId   String
-  segment     StorySegment @relation(fields: [segmentId], references: [id])
-  parentStoryId String?
-  parentStory  Story?   @relation("StoryBranches", fields: [parentStoryId], references: [id])
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  
-  // 关联关系
-  segments    StorySegment[]
-  
-  // C1: 1.7 扩展
-  characterStateSnapshot String? // JSON string of Record<string, string>
-  forkTimeline          String?  // JSON string of TimelineEvent
-  
+  id                     String     @id @default(cuid())
+  title                  String
+  description            String?
+  sourceSegmentId        String
+  storyId                String
+  userDirection          String
+  characterStateSnapshot Json?
+  forkTimeline           Json?
+  createdAt              DateTime   @default(now())
+  updatedAt              DateTime   @updatedAt
+
+  ownerId                String
+  owner                  User       @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  visibility             Visibility @default(PRIVATE)
+
+  story                  Story        @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  sourceSegment          StorySegment @relation("BranchSource", fields: [sourceSegmentId], references: [id])
+
+  @@index([storyId])
+  @@index([ownerId])
+  @@index([visibility])
   @@map("story_branches")
 }
 
-// C1: 1.10 角色模型
 model Character {
-  id              String   @id @default(cuid())
-  name            String
-  era             String
-  role            String   @default("supporting") // protagonist/supporting/antagonist/narrator
-  traits          String[] @default([])
-  speechPatterns  String   @default("")
-  relationships   String   @default("[]") // JSON string of CharacterRelationship[]
-  stateHistory    String   @default("[]") // JSON string of CharacterStateEntry[]
-  coreMotivation  String   @default("")
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  
-  storyId         String
-  story           Story    @relation(fields: [storyId], references: [id], onDelete: Cascade)
-  
+  id             String   @id @default(cuid())
+  name           String
+  era            String
+  role           String   @default("supporting")
+  speechPatterns String   @default("")
+  coreMotivation String   @default("")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  traits         Json     @default("[]")
+  relationships  Json     @default("[]")
+  stateHistory   Json     @default("[]")
+
+  storyId        String
+  story          Story    @relation(fields: [storyId], references: [id], onDelete: Cascade)
+
+  @@index([storyId])
   @@map("characters")
 }
 
-// C1: 1.10 历史引用模型
-model HistoricalReference {
-  id            String   @id @default(cuid())
-  entityType    String   // person/event/place/artifact
-  name          String
-  wikiUrl       String?
-  wikiSummary   String?
-  confidence    Float    @default(0.5)
-  verifiedAt    DateTime?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  
-  // 多对多关联：段落 <-> 历史引用
-  segments      StorySegmentHistoricalRef[]
-  
-  @@map("historical_references")
+model DirectorState {
+  id                String   @id @default(cuid())
+  storyId           String   @unique
+  story             Story    @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  characterStates   Json     @default("{}")
+  worldVariables    Json     @default("{}")
+  activeConstraints Json     @default("[]")
+  updatedAt         DateTime @updatedAt
+
+  @@map("director_states")
 }
 
-// 段落-历史引用 多对多中间表
-model StorySegmentHistoricalRef {
-  segmentId             String
-  segment               StorySegment @relation(fields: [segmentId], references: [id], onDelete: Cascade)
-  historicalReferenceId String
-  historicalReference   HistoricalReference @relation(fields: [historicalReferenceId], references: [id], onDelete: Cascade)
-  
-  @@id([segmentId, historicalReferenceId])
-  @@map("story_segment_historical_refs")
+model SegmentSummary {
+  id          String       @id @default(cuid())
+  segmentId   String
+  storyId     String
+  branchId    String
+  chainIndex  Int          @default(0)
+  summary     String       @db.Text
+  tokenCount  Int?
+  originalTokenCount Int?
+  aiGenerated Boolean      @default(false)
+  metadata    Json?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  segment     StorySegment @relation(fields: [segmentId], references: [id], onDelete: Cascade)
+
+  @@unique([segmentId, branchId])
+  @@index([storyId, branchId])
+  @@map("segment_summaries")
+}
+
+model KeyEvent {
+  id                    String   @id @default(cuid())
+  storyId               String
+  story                 Story    @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  branchId              String
+  segmentId             String?
+  eventType             String
+  description           String   @db.Text
+  era                   String?
+  year                  Int?
+  season                String?
+  narrativeTime         String?
+  status                String   @default("active")
+  importance            String   @default("major")
+  involvedCharacterIds  Json     @default("[]")
+  resolvedBySegmentId   String?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@index([storyId])
+  @@index([storyId, branchId])
+  @@map("key_events")
 }

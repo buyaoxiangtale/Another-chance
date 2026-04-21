@@ -1,6 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { generateImagesForSegment, IMAGE_STYLES, type ImageStyle } from '@/lib/image-generator';
-import { segmentsStore } from '@/lib/simple-db';
+import {
+  generateImagesForSegment,
+  IMAGE_STYLES,
+  type ImageStyle,
+  type CharacterVisualHint,
+} from '@/lib/image-generator';
+import prisma from '@/lib/prisma';
+import { callAIText } from '@/lib/ai-client';
+import { characterManager } from '@/lib/character-engine';
+import { directorManager } from '@/lib/director-manager';
+import { contextSummarizer } from '@/lib/context-summarizer';
+import { getOrderedChain } from '@/lib/chain-helpers';
 
 /**
  * POST /api/images/generate
@@ -9,7 +19,7 @@ import { segmentsStore } from '@/lib/simple-db';
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { segmentId, segmentContent, style = 'historical-realistic', maxImages = 3 } = body;
+    const { segmentId, segmentContent, style = 'auto', maxImages = 3 } = body;
 
     if (!segmentId || !segmentContent) {
       return NextResponse.json(
@@ -21,24 +31,164 @@ export async function POST(request: NextRequest) {
     // 验证 style 是否合法
     const validStyle: ImageStyle = IMAGE_STYLES.find(s => s.value === style)
       ? style as ImageStyle
-      : 'historical-realistic';
+      : 'auto';
 
-    // 调用真实的图片生成模块
+    // 拉取段落所属 story 的 genre / description / storyId，用于 auto 风格选择 + 角色还原
+    let genre: string | undefined;
+    let storyDescription: string | undefined;
+    let storyIdForChars: string | undefined;
+    let storyTitleForSeed: string | undefined;
+    let storyEraForSeed: string | undefined;
+    let branchIdForChain = 'main';
+    try {
+      const seg = await prisma.storySegment.findUnique({
+        where: { id: segmentId },
+        select: {
+          storyId: true,
+          branchId: true,
+          story: { select: { genre: true, description: true, era: true, title: true } },
+        },
+      });
+      if (seg?.story) {
+        genre = [seg.story.genre, seg.story.era].filter(Boolean).join(' ');
+        storyDescription = seg.story.description ?? undefined;
+        storyIdForChars = seg.storyId;
+        storyTitleForSeed = seg.story.title;
+        storyEraForSeed = seg.story.era ?? undefined;
+        branchIdForChain = seg.branchId || 'main';
+      }
+    } catch (e) {
+      console.warn('[images/generate] 拉取 story 信息失败:', e);
+    }
+
+    // 方案 E：首次生成时，为已知 IP 预播 fandom 角色名册（有 web_search 的 LLM）
+    if (storyIdForChars) {
+      try {
+        await characterManager.seedFandomRoster(storyIdForChars, {
+          title: storyTitleForSeed,
+          genre,
+          storyDescription,
+          era: storyEraForSeed,
+          callAIWithWebSearchFn: (p: string) => callAIText(p, { maxTokens: 1200, webSearch: true }),
+        });
+      } catch (e) {
+        console.warn('[images/generate] seedFandomRoster 失败:', e);
+      }
+    }
+
+    // 发现并自动注册段落中出现的所有角色（含新角色）
+    // 外观存入 Character.traits，下次命中缓存；新角色首次出现时 AI 实时登记
+    const characters: CharacterVisualHint[] = [];
+    if (storyIdForChars) {
+      try {
+        const mentioned = await characterManager.discoverAndRegisterCharacters(
+          storyIdForChars,
+          segmentContent,
+          (p: string) => callAIText(p, { maxTokens: 300 }),
+          {
+            genre,
+            storyDescription,
+            // 联网查询分支：GLM 内置 web_search，用来补齐未知角色外观
+            callAIWithWebSearchFn: (p: string) => callAIText(p, { maxTokens: 600, webSearch: true }),
+          },
+        );
+
+        for (const c of mentioned) {
+          const traits = Array.isArray(c.traits) ? (c.traits as string[]) : [];
+          const canonicalName = traits.find(t => typeof t === 'string' && t.startsWith('canonical:'))?.slice('canonical:'.length);
+          const appearance = traits.find(t => typeof t === 'string' && t.startsWith('appearance:'))?.slice('appearance:'.length);
+
+          characters.push({
+            name: c.name,
+            canonicalName,
+            appearance,
+            role: c.role || undefined,
+          });
+        }
+      } catch (e) {
+        console.warn('[images/generate] 角色发现/注册失败:', e);
+      }
+    }
+
+    // 方案 C：拉取近 N 段摘要，传入图片生成器作为上下文
+    // 只在 chain 长度 > 1 时拉（首段无历史上下文，避免无用 LLM 调用）
+    let contextSummary: string | undefined;
+    if (storyIdForChars) {
+      try {
+        const chain = await getOrderedChain(storyIdForChars, branchIdForChain);
+        if (chain.length > 1) {
+          const recent = chain.slice(-6, -1) as any[]; // 取当前段之前的最近 5 段，不包含当前段
+          if (recent.length > 0) {
+            contextSummary = await contextSummarizer.getContextForPrompt(recent, 1200, genre);
+          }
+        }
+      } catch (e) {
+        console.warn('[images/generate] 拉取上下文摘要失败:', e);
+      }
+    }
+
+    // 方案 A：读取滚动场景状态（英文），保证跨段连贯性
+    // 若为空（race：新段刚写入，fire-and-forget 的 updateSceneState 还没跑完），
+    // 用当前段落内容同步补一次，避免首张图丢失场景信息
+    let sceneStateEn: string | undefined;
+    if (storyIdForChars) {
+      try {
+        sceneStateEn = await directorManager.getSceneStatePromptEnglish(storyIdForChars);
+        if (!sceneStateEn || sceneStateEn.trim().length === 0) {
+          await directorManager.updateSceneState(
+            storyIdForChars,
+            segmentContent,
+            (p: string) => callAIText(p, { maxTokens: 400 }),
+          );
+          sceneStateEn = await directorManager.getSceneStatePromptEnglish(storyIdForChars);
+        }
+      } catch (e) {
+        console.warn('[images/generate] 读取场景状态失败:', e);
+      }
+    }
+
+    // 方案 B：基于"已登记主要角色集合"派生稳定 seed，锁定视觉一致性
+    let seed: number | undefined;
+    if (characters.length > 0) {
+      const key = characters.map(c => c.canonicalName || c.name).sort().join('|');
+      let h = 2166136261;
+      for (let i = 0; i < key.length; i++) {
+        h ^= key.charCodeAt(i);
+        h = Math.imul(h, 16777619);
+      }
+      seed = Math.abs(h) % 2147483647;
+    }
+
+    // 调用真实的图片生成模块（优先用 AI 做场景提取 + 英文 prompt 翻译）
     const images = await generateImagesForSegment({
       segmentId,
       segmentContent,
       style: validStyle,
       maxImages,
+      genre,
+      storyDescription,
+      characters,
+      contextSummary,
+      sceneStateEn,
+      seed,
+      callAIFn: (p: string) => callAIText(p, { maxTokens: 800 }),
     });
 
-    // 更新段落的 imageUrls 到数据库
+    // 更新段落的 imageUrls 到数据库（追加而非覆盖，保留历史插图）
     if (images.length > 0) {
-      const segments = await segmentsStore.load();
-      const idx = segments.findIndex((s: any) => s.id === segmentId);
-      if (idx !== -1) {
-        segments[idx].imageUrls = images.map(img => img.url);
-        segments[idx].updatedAt = new Date().toISOString();
-        await segmentsStore.save(segments);
+      try {
+        const current = await prisma.storySegment.findUnique({
+          where: { id: segmentId },
+          select: { imageUrls: true },
+        });
+        const prevUrls: string[] = Array.isArray(current?.imageUrls) ? (current!.imageUrls as string[]) : [];
+        const newUrls = images.map(img => img.url);
+        await prisma.storySegment.update({
+          where: { id: segmentId },
+          data: { imageUrls: [...prevUrls, ...newUrls] },
+        });
+      } catch (e) {
+        console.warn('[images/generate] 更新段落 imageUrls 失败:', e);
       }
     }
 

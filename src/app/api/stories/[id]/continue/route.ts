@@ -9,6 +9,7 @@ import { timelineEngine } from '@/lib/timeline-engine';
 import { consistencyChecker } from '@/lib/consistency-checker';
 import { callAIText } from '@/lib/ai-client';
 import { classifyGenre } from '@/lib/genre-config';
+import { characterManager } from '@/lib/character-engine';
 import type { StorySegment } from '@/lib/prisma';
 
 export async function POST(
@@ -114,6 +115,23 @@ export async function POST(
       }, { status: 500 });
     }
 
+    let mentionedIds: string[] = [];
+    try {
+      const mentioned = await characterManager.discoverAndRegisterCharacters(
+        storyId,
+        aiResponse,
+        (p: string) => callAIText(p, { maxTokens: 300, story: story as any }),
+        {
+          genre: story.genre ?? undefined,
+          storyDescription: story.description ?? undefined,
+          callAIWithWebSearchFn: (p: string) => callAIText(p, { maxTokens: 600, story: story as any, webSearch: true }),
+        },
+      );
+      mentionedIds = mentioned.map(c => c.id);
+    } catch (e) {
+      console.warn('[continue] 角色发现/注册失败:', e);
+    }
+
     const newSegment = await prisma.storySegment.create({
       data: {
         storyId,
@@ -126,8 +144,24 @@ export async function POST(
         narrativePace: pacingConfig?.pace,
         mood: pacingConfig?.mood,
         visibility: story.visibility,
+        characterIds: mentionedIds,
       },
     });
+
+    if (mentionedIds.length > 0) {
+      characterManager
+        .inferAndUpdateStatesForSegment(storyId, newSegment.id, aiResponse, (p: string) =>
+          callAIText(p, { maxTokens: 300, story: story as any })
+        )
+        .catch((e: any) => console.warn('[continue] 角色状态更新失败:', e));
+    }
+
+    // 方案 A：增量更新滚动场景状态（location/time/weather/在场角色/服装）
+    directorManager
+      .updateSceneState(storyId, aiResponse, (p: string) =>
+        callAIText(p, { maxTokens: 400, story: story as any })
+      )
+      .catch((e: any) => console.warn('[continue] 场景状态更新失败:', e));
 
     // Post-write consistency check
     try {

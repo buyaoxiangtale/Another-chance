@@ -35,6 +35,10 @@ services:
       - AI_API_KEY=${AI_API_KEY}
       - AI_BASE_URL=${AI_BASE_URL}
       - AI_MODEL=${AI_MODEL}
+      - AI_IMAGE_PROVIDER=${AI_IMAGE_PROVIDER}
+      - AI_IMAGE_API_KEY=${AI_IMAGE_API_KEY}
+      - AI_IMAGE_BASE_URL=${AI_IMAGE_BASE_URL}
+      - AI_IMAGE_MODEL=${AI_IMAGE_MODEL}
     depends_on:
       postgres:
         condition: service_healthy
@@ -55,6 +59,10 @@ services:
       - AI_API_KEY=${AI_API_KEY}
       - AI_BASE_URL=${AI_BASE_URL}
       - AI_MODEL=${AI_MODEL}
+      - AI_IMAGE_PROVIDER=${AI_IMAGE_PROVIDER}
+      - AI_IMAGE_API_KEY=${AI_IMAGE_API_KEY}
+      - AI_IMAGE_BASE_URL=${AI_IMAGE_BASE_URL}
+      - AI_IMAGE_MODEL=${AI_IMAGE_MODEL}
     volumes:
       - .:/app
       - /app/node_modules

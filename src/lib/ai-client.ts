@@ -336,12 +336,14 @@ export function getDefaultModelConfig(): AIModelConfig {
 
 /**
  * 生成完整的 OpenAI API 请求数据
+ * @param enableWebSearch 让 GLM 模型启用内置 web_search 工具联网
  */
 export function buildOpenAIRequest(
   prompt: string,
   systemPrompt?: string,
   maxTokens?: number,
-  story?: Story
+  story?: Story,
+  enableWebSearch?: boolean,
 ) {
   const config = getDefaultModelConfig();
   const params = story ? getGenerationParams(story) : getGenerationParams({} as Story);
@@ -351,7 +353,7 @@ export function buildOpenAIRequest(
     { role: 'user', content: prompt }
   ];
 
-  const requestBody = {
+  const requestBody: Record<string, unknown> = {
     model: config.model,
     messages,
     temperature: params.temperature,
@@ -359,6 +361,20 @@ export function buildOpenAIRequest(
     frequency_penalty: params.frequency_penalty,
     max_tokens: maxTokens || params.max_tokens
   };
+
+  // 启用智谱 GLM 内置 web_search 工具（BigModel /paas/v4 端点支持）
+  if (enableWebSearch) {
+    requestBody.tools = [
+      {
+        type: 'web_search',
+        web_search: {
+          enable: true,
+          search_engine: 'search_std',
+          search_result: true,
+        },
+      },
+    ];
+  }
 
   return {
     url: `${config.baseUrl}/chat/completions`,
@@ -384,12 +400,13 @@ export async function callAI(prompt: string, options: {
   story?: Story;
   stream?: boolean;
   priority?: RequestPriority;
+  webSearch?: boolean;
 } = {}): Promise<Response> {
-  const { priority = 'high', systemPrompt, maxTokens, story } = options;
+  const { priority = 'high', systemPrompt, maxTokens, story, webSearch } = options;
 
   return aiRequestQueue.enqueue(
     () => callAIWithRetry(() => {
-      const request = buildOpenAIRequest(prompt, systemPrompt, maxTokens, story);
+      const request = buildOpenAIRequest(prompt, systemPrompt, maxTokens, story, webSearch);
       return fetch(request.url, {
         method: 'POST',
         headers: request.headers,
@@ -411,6 +428,7 @@ export async function callAIText(prompt: string, options: {
   maxTokens?: number;
   story?: Story;
   priority?: RequestPriority;
+  webSearch?: boolean;
 } = {}): Promise<string> {
   const response = await callAI(prompt, options);
   const data = await response.json();

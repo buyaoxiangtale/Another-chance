@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import {
+  analyzeStoryStyle,
+  analyzeSegmentStyle,
   generateImagesForSegment,
   IMAGE_STYLES,
   type ImageStyle,
@@ -12,14 +14,10 @@ import { directorManager } from '@/lib/director-manager';
 import { contextSummarizer } from '@/lib/context-summarizer';
 import { getOrderedChain } from '@/lib/chain-helpers';
 
-/**
- * POST /api/images/generate
- * 为指定段落生成插图，并更新段落的 imageUrls 字段
- */
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { segmentId, segmentContent, style = 'auto', maxImages = 3 } = body;
+    const { segmentId, segmentContent, style = 'auto', storyContent, maxImages = 3 } = body;
 
     if (!segmentId || !segmentContent) {
       return NextResponse.json(
@@ -29,7 +27,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 验证 style 是否合法
-    const validStyle: ImageStyle = IMAGE_STYLES.find(s => s.value === style)
+    const requestedStyle: ImageStyle = IMAGE_STYLES.find(s => s.value === style)
       ? style as ImageStyle
       : 'auto';
 
@@ -159,11 +157,34 @@ export async function POST(request: NextRequest) {
       seed = Math.abs(h) % 2147483647;
     }
 
-    // 调用真实的图片生成模块（优先用 AI 做场景提取 + 英文 prompt 翻译）
+    // 确定使用的风格：显式传入 > 自动分析
+    let styleUsed: ImageStyle;
+    let styleReason = '';
+
+    if (requestedStyle !== 'auto') {
+      styleUsed = requestedStyle;
+      styleReason = '用户手动选择';
+    } else {
+      const storyStyleAnalysis = typeof storyContent === 'string' && storyContent.trim()
+        ? analyzeStoryStyle(storyContent.slice(0, 2000))
+        : undefined;
+      const result = analyzeSegmentStyle(segmentContent, {
+        storyStyle: storyStyleAnalysis && storyStyleAnalysis.confidence >= 0.5
+          ? storyStyleAnalysis.recommendedStyle
+          : undefined,
+        genre,
+        storyDescription,
+      });
+      styleUsed = result.style;
+      styleReason =
+        (!result.isAutoOverride && storyStyleAnalysis && storyStyleAnalysis.confidence >= 0.5
+          ? storyStyleAnalysis.reason
+          : result.reason) + (result.isAutoOverride ? '（段落级覆盖）' : '');
+    }
     const images = await generateImagesForSegment({
       segmentId,
       segmentContent,
-      style: validStyle,
+      style: styleUsed,
       maxImages,
       genre,
       storyDescription,
@@ -195,6 +216,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       segmentId,
+      styleUsed,
+      styleReason,
       images: images.map((img, i) => ({
         id: `img_${segmentId}_${i}`,
         url: img.url,
@@ -219,7 +242,6 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// 支持的图片风格选项
 export async function OPTIONS() {
   return NextResponse.json({
     allowedMethods: ['POST'],

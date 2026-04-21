@@ -12,75 +12,36 @@
 import { join } from 'path';
 import { writeFile, mkdir } from 'fs/promises';
 import { existsSync } from 'fs';
+import {
+  IMAGE_STYLES,
+  type ImageStyle,
+  type ConcreteImageStyle,
+  type SceneDescription,
+  type GeneratedImage,
+} from './image-styles';
+
+// Re-export for convenience
+export {
+  IMAGE_STYLES,
+  type ImageStyle,
+  type ConcreteImageStyle,
+  type SceneDescription,
+  type GeneratedImage,
+} from './image-styles';
 
 // ─── 配置 ───────────────────────────────────────────────────────────
 
 /** 图片生成提供商配置 */
 export interface ImageGeneratorConfig {
-  /** 提供商标识：openai / siliconflow / tongyi / custom */
   provider: string;
-  /** API Key */
   apiKey: string;
-  /** 模型名（如 dall-e-3、Kolors 等） */
   model: string;
-  /** API Base URL */
   baseUrl: string;
-}
-
-/** 图片风格 */
-export type ImageStyle =
-  | 'auto'                   // 根据 genre 自动选择
-  | 'historical-realistic'   // 历史写实（古代中国）
-  | 'ink-wash'               // 水墨画
-  | 'gongbi'                 // 工笔画
-  | 'dunhuang-mural'         // 敦煌壁画
-  | 'modern-realistic'       // 现代/都市写实
-  | 'sci-fi-cinematic'       // 科幻电影风
-  | 'fantasy-epic'           // 玄幻/奇幻
-  | 'wuxia'                  // 武侠/仙侠
-  | 'anime'                  // 动漫/同人
-  | 'noir-thriller';         // 悬疑/暗色
-
-/** 所有可选风格 */
-export const IMAGE_STYLES: { value: ImageStyle; label: string }[] = [
-  { value: 'auto', label: '自动（按故事类型）' },
-  { value: 'historical-realistic', label: '历史写实' },
-  { value: 'ink-wash', label: '水墨画' },
-  { value: 'gongbi', label: '工笔画' },
-  { value: 'dunhuang-mural', label: '敦煌壁画' },
-  { value: 'modern-realistic', label: '现代写实' },
-  { value: 'sci-fi-cinematic', label: '科幻电影' },
-  { value: 'fantasy-epic', label: '玄幻史诗' },
-  { value: 'wuxia', label: '武侠/仙侠' },
-  { value: 'anime', label: '动漫' },
-  { value: 'noir-thriller', label: '悬疑黑色' },
-];
-
-/** 场景描述提取结果 */
-export interface SceneDescription {
-  /** 英文 prompt（发给图片 API） */
-  prompt: string;
-  /** 中文描述（用于前端展示） */
-  description: string;
-  /** 场景类型 */
-  type: 'scene' | 'character' | 'object';
-}
-
-/** 图片生成结果 */
-export interface GeneratedImage {
-  /** 本地相对路径（如 /generated-images/xxx.png） */
-  url: string;
-  /** 场景描述 */
-  description: string;
-  /** 场景类型 */
-  type: 'scene' | 'character' | 'object';
-  /** 原始 prompt */
-  prompt: string;
 }
 
 // ─── 2.3 风格 Prompt 模板 ────────────────────────────────────────────
 
-const STYLE_TEMPLATES: Record<Exclude<ImageStyle, 'auto'>, string> = {
+const STYLE_TEMPLATES: Record<ConcreteImageStyle, string> = {
   'historical-realistic':
     'Chinese historical realistic painting, highly detailed, accurate ancient Chinese architecture and hanfu costumes, warm oil-paint lighting, cinematic composition',
 
@@ -117,7 +78,7 @@ function autoPickStyle(
   genre?: string,
   description?: string,
   segmentContent?: string,
-): Exclude<ImageStyle, 'auto'> {
+): ConcreteImageStyle {
   const blob = [genre, description, segmentContent].filter(Boolean).join(' ');
 
   // 科幻：标签 / 常见科幻名词（飞船、星舰、三体、机甲、虫洞、基地、超光速……）
@@ -243,7 +204,7 @@ function applyStylePrompt(
   style: ImageStyle = 'auto',
   ctx?: { genre?: string; description?: string; segmentContent?: string }
 ): string {
-  const resolved: Exclude<ImageStyle, 'auto'> =
+  const resolved: ConcreteImageStyle =
     style === 'auto' ? autoPickStyle(ctx?.genre, ctx?.description, ctx?.segmentContent) : style;
   const template = STYLE_TEMPLATES[resolved] || STYLE_TEMPLATES['modern-realistic'];
   return `${prompt}. ${template}`;
@@ -380,6 +341,99 @@ async function callImageAPI(prompt: string, config: ImageGeneratorConfig, seed?:
 
   const json = await response.json();
   return json.data?.[0] ?? json;
+}
+
+// ─── 风格分析（启发式） ────────────────────────────────────────────────
+
+const STYLE_RULES: { keywords: string[]; style: ConcreteImageStyle; reason: string }[] = [
+  { keywords: ['宫廷', '贵族', '后宫', '妃', '嫔', '皇后', '太子', '朝堂', '御', '殿上', '锦衣', '华服', '玉玺', '龙袍'], style: 'gongbi', reason: '宫廷贵族题材，工笔画风格更能展现华美细节' },
+  { keywords: ['战争', '沙场', '军事', '兵', '军', '战', '攻城', '征伐', '将军', '铁骑', '战马', '烽火', '刀兵', '甲胄'], style: 'historical-realistic', reason: '战争军事题材，写实风格更具史诗感' },
+  { keywords: ['隐逸', '山水', '田园', '诗酒', '竹林', '垂钓', '归隐', '悠然', '琴棋', '煮茶', '渔舟', '采菊'], style: 'ink-wash', reason: '山水田园题材，水墨画最能表达诗意' },
+  { keywords: ['宗教', '佛', '道', '西域', '丝绸之路', '敦煌', '飞天', '梵', '寺', '僧', '袈裟', '石窟', '胡人'], style: 'dunhuang-mural', reason: '宗教西域题材，敦煌壁画风格最为贴切' },
+];
+
+function countKeywordMatches(text: string, keywords: string[]): number {
+  let score = 0;
+  for (const kw of keywords) {
+    score += text.split(kw).length - 1;
+  }
+  return score;
+}
+
+/**
+ * 分析故事整体风格
+ */
+export function analyzeStoryStyle(storyContent: string): {
+  recommendedStyle: ConcreteImageStyle;
+  reason: string;
+  confidence: number;
+} {
+  const text = storyContent.slice(0, 2000);
+  let bestScore = 0;
+  let bestRule = STYLE_RULES[STYLE_RULES.length - 1]; // 默认 ink-wash
+
+  for (const rule of STYLE_RULES) {
+    const score = countKeywordMatches(text, rule.keywords);
+    if (score > bestScore) {
+      bestScore = score;
+      bestRule = rule;
+    }
+  }
+
+  if (bestScore === 0) {
+    const autoStyle = autoPickStyle(undefined, undefined, text);
+    return {
+      recommendedStyle: autoStyle,
+      reason: '未检测到强烈的细分历史风格信号，按故事题材自动推荐',
+      confidence: 0.4,
+    };
+  }
+
+  const confidence = Math.min(bestScore / 5, 1);
+  return {
+    recommendedStyle: bestRule.style,
+    reason: bestRule.reason,
+    confidence,
+  };
+}
+
+/**
+ * 分析单个段落风格，可覆盖故事整体风格
+ */
+export function analyzeSegmentStyle(
+  segmentContent: string,
+  context?: {
+    storyStyle?: ConcreteImageStyle;
+    genre?: string;
+    storyDescription?: string;
+  }
+): {
+  style: ConcreteImageStyle;
+  reason: string;
+  isAutoOverride: boolean;
+} {
+  const fallbackStyle: ConcreteImageStyle =
+    context?.storyStyle ??
+    autoPickStyle(context?.genre, context?.storyDescription, segmentContent);
+
+  // 先检测段落是否有强烈的特殊风格信号
+  for (const rule of STYLE_RULES) {
+    const matchCount = rule.keywords.filter(kw => segmentContent.includes(kw)).length;
+    if (matchCount >= 2) {
+      // 段落有明确风格信号，且与故事风格不同 → 覆盖
+      if (rule.style !== fallbackStyle) {
+        return { style: rule.style, reason: rule.reason, isAutoOverride: true };
+      }
+      return { style: rule.style, reason: rule.reason, isAutoOverride: false };
+    }
+  }
+
+  // 无明确信号，跟随故事整体画风；若没有整体风格，则按题材自动推断
+  return {
+    style: fallbackStyle,
+    reason: context?.storyStyle ? '跟随故事整体画风' : '根据故事题材自动推荐',
+    isAutoOverride: false,
+  };
 }
 
 // ─── 导出接口 ─────────────────────────────────────────────────────────

@@ -503,10 +503,13 @@
     "isBranchPoint": false,
     "branchId": "main",
     "parentSegmentId": "seg_1776401926668_7fpj7z8jb",
-    "imageUrls": [],
+    "imageUrls": [
+      "/generated-images/seg_1776401989217_0kp60y_0_1776660619321.png",
+      "/generated-images/seg_1776401989217_0kp60y_1_1776660648003.png"
+    ],
     "narrativePace": "detailed",
     "createdAt": "2026-04-17T04:59:49.217Z",
-    "updatedAt": "2026-04-17T04:59:49.217Z"
+    "updatedAt": "2026-04-20T04:50:48.004Z"
   },
   {
     "id": "seg_1776402672928_dlkg2t",
@@ -516,10 +519,14 @@
     "isBranchPoint": false,
     "branchId": "main",
     "parentSegmentId": "seg_1776401989217_0kp60y",
-    "imageUrls": [],
+    "imageUrls": [
+      "/generated-images/seg_1776402672928_dlkg2t_0_1776660710573.png",
+      "/generated-images/seg_1776402672928_dlkg2t_1_1776660738712.png",
+      "/generated-images/seg_1776402672928_dlkg2t_2_1776660768442.png"
+    ],
     "narrativePace": "detailed",
     "createdAt": "2026-04-17T05:11:12.928Z",
-    "updatedAt": "2026-04-17T05:11:12.928Z"
+    "updatedAt": "2026-04-20T04:52:48.443Z"
   },
   {
     "id": "seg_1776403213420_1zmc68",

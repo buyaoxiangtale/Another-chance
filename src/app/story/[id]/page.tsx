@@ -7,6 +7,7 @@ import TimelineBar from '@/components/TimelineBar';
 import DirectorSidebar from '@/components/DirectorSidebar';
 import PacingControls from '@/components/PacingControls';
 import StoryImageDisplay from '@/components/story/StoryImageDisplay';
+import { IMAGE_STYLES, type ImageStyle, type ConcreteImageStyle } from '@/lib/image-styles';
 import type { PacingConfig, Character, StorySegment, StoryBranch } from '@/types/story';
 
 interface Story {
@@ -59,6 +60,8 @@ export default function StoryDetailPage({ params }: { params: { id: string } }) 
   const abortRef = useRef<AbortController | null>(null);
   // P6-2: 图片生成状态
   const [regeneratingImageForSeg, setRegeneratingImageForSeg] = useState<string | null>(null);
+  const [imageStyle, setImageStyle] = useState<ImageStyle>('auto');
+  const [styleRecommendation, setStyleRecommendation] = useState<{style: ConcreteImageStyle, reason: string} | null>(null);
 
   const loadBranchSegments = useCallback(async (branchId: string) => {
     const segRes = await fetch(`/api/stories/${id}/segments?branchId=${branchId}`);
@@ -107,6 +110,30 @@ export default function StoryDetailPage({ params }: { params: { id: string } }) 
     }
     load();
   }, [id]);
+
+  // 加载风格推荐
+  useEffect(() => {
+    setImageStyle('auto');
+    setStyleRecommendation(null);
+  }, [id]);
+
+  useEffect(() => {
+    if (!story || segments.length === 0) return;
+    const content = story.title + segments.slice(0, 5).map(s => s.content).join('');
+    if (content.length < 50) return;
+    fetch('/api/images/style-recommend', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content }),
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (data.recommendedStyle && data.recommendedStyle !== 'auto') {
+          setStyleRecommendation({ style: data.recommendedStyle, reason: data.reason });
+        }
+      })
+      .catch(() => {});
+  }, [story, segments]);
 
   useEffect(() => {
     if (!loading) loadBranchSegments(currentBranchId);
@@ -208,10 +235,11 @@ export default function StoryDetailPage({ params }: { params: { id: string } }) 
   const handleRegenerateImages = async (segmentId: string, content: string) => {
     setRegeneratingImageForSeg(segmentId);
     try {
+      const storyContent = story ? story.title + segments.slice(0, 5).map(s => s.content).join('') : '';
       const res = await fetch('/api/images/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ segmentId, segmentContent: content }),
+        body: JSON.stringify({ segmentId, segmentContent: content, style: imageStyle, storyContent }),
       });
       if (!res.ok) throw new Error('图片生成失败');
       // 刷新段落列表以获取更新后的 imageUrls
@@ -621,6 +649,34 @@ export default function StoryDetailPage({ params }: { params: { id: string } }) 
 
                         {/* P6-2: 段落插图 */}
                         <div className="mt-4">
+                          {/* 图片风格选择器 */}
+                          <div className="flex items-center gap-2 mb-2 flex-wrap">
+                            <span className="text-xs text-[var(--muted)]">画风：</span>
+                            {IMAGE_STYLES.map(s => (
+                              <button
+                                key={s.value}
+                                onClick={() => setImageStyle(s.value)}
+                                className={`text-xs px-2.5 py-1 rounded-full border transition-all ${
+                                  imageStyle === s.value
+                                    ? 'bg-[var(--gold)]/10 border-[var(--gold)] text-[var(--gold)] font-medium'
+                                    : 'border-[var(--border)] text-[var(--muted)] hover:border-[var(--gold)]/50 hover:text-[var(--gold)]'
+                                }`}
+                              >
+                                {s.label}
+                                {styleRecommendation?.style === s.value && (
+                                  <span className="ml-1 text-[10px]">⭐</span>
+                                )}
+                              </button>
+                            ))}
+                          </div>
+                          {styleRecommendation && (
+                            <p className="text-[10px] text-[var(--muted)] mb-2 italic">
+                              💡 推荐画风：{IMAGE_STYLES.find(s => s.value === styleRecommendation.style)?.label || styleRecommendation.style}
+                              {imageStyle === 'auto' ? '（当前按自动模式生效）' : imageStyle === styleRecommendation.style ? '（当前已采用）' : ''}
+                              {' · '}
+                              {styleRecommendation.reason}
+                            </p>
+                          )}
                           <StoryImageDisplay
                             segmentId={seg.id}
                             imageUrls={seg.imageUrls}

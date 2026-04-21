@@ -60,22 +60,70 @@ const storyTypes = [
   { id: 'original', name: '原创故事', description: '完全原创的分叉故事' }
 ];
 
-// C6.9: Dynasty/era options
+// C6.9: Dynasty/era options — 古代 + 现代/未来
 const eraOptions = [
-  { value: '先秦', label: '先秦', icon: '🏛️' },
-  { value: '秦', label: '秦', icon: '🐉' },
-  { value: '汉', label: '汉', icon: '⚔️' },
-  { value: '三国', label: '三国', icon: '🔥' },
-  { value: '晋', label: '晋', icon: '📜' },
-  { value: '南北朝', label: '南北朝', icon: '🏔️' },
-  { value: '隋', label: '隋', icon: '🏗️' },
-  { value: '唐', label: '唐', icon: '👑' },
-  { value: '宋', label: '宋', icon: '🖌️' },
-  { value: '元', label: '元', icon: '🐎' },
-  { value: '明', label: '明', icon: '🏰' },
-  { value: '清', label: '清', icon: '🏮' },
-  { value: '其他', label: '其他', icon: '🌐' },
+  { value: '先秦', label: '先秦', icon: '🏛️', group: '古代' },
+  { value: '秦', label: '秦', icon: '🐉', group: '古代' },
+  { value: '汉', label: '汉', icon: '⚔️', group: '古代' },
+  { value: '三国', label: '三国', icon: '🔥', group: '古代' },
+  { value: '晋', label: '晋', icon: '📜', group: '古代' },
+  { value: '南北朝', label: '南北朝', icon: '🏔️', group: '古代' },
+  { value: '隋', label: '隋', icon: '🏗️', group: '古代' },
+  { value: '唐', label: '唐', icon: '👑', group: '古代' },
+  { value: '宋', label: '宋', icon: '🖌️', group: '古代' },
+  { value: '元', label: '元', icon: '🐎', group: '古代' },
+  { value: '明', label: '明', icon: '🏰', group: '古代' },
+  { value: '清', label: '清', icon: '🏮', group: '古代' },
+  { value: '近代', label: '近代', icon: '📰', group: '近现代' },
+  { value: '民国', label: '民国', icon: '🎩', group: '近现代' },
+  { value: '现代', label: '现代', icon: '🏙️', group: '近现代' },
+  { value: '当代', label: '当代', icon: '📱', group: '近现代' },
+  { value: '近未来', label: '近未来', icon: '🤖', group: '未来' },
+  { value: '未来', label: '未来', icon: '🚀', group: '未来' },
+  { value: '架空世界', label: '架空世界', icon: '🌍', group: '虚构' },
+  { value: '其他', label: '其他', icon: '🌐', group: '虚构' },
 ];
+
+/** 细分体裁选项 — 根据故事类型动态展示 */
+const genreOptions: Record<string, { value: string; label: string }[]> = {
+  historical: [
+    { value: '正史', label: '正史' },
+    { value: '演义', label: '演义' },
+    { value: '架空', label: '架空历史' },
+    { value: '穿越', label: '穿越' },
+    { value: '军事', label: '军事' },
+  ],
+  legend: [
+    { value: '演义', label: '演义' },
+    { value: '武侠', label: '武侠' },
+    { value: '仙侠', label: '仙侠' },
+    { value: '玄幻', label: '玄幻' },
+    { value: '奇幻', label: '奇幻' },
+  ],
+  literary: [
+    { value: '同人', label: '同人' },
+    { value: '悬疑', label: '悬疑推理' },
+    { value: '都市', label: '都市' },
+    { value: '现代', label: '现代文学' },
+    { value: '军事', label: '军事' },
+  ],
+  original: [
+    { value: '都市', label: '都市' },
+    { value: '悬疑', label: '悬疑推理' },
+    { value: '玄幻', label: '玄幻' },
+    { value: '仙侠', label: '仙侠' },
+    { value: '武侠', label: '武侠' },
+    { value: '科幻', label: '科幻' },
+    { value: '末世', label: '末世' },
+    { value: '穿越', label: '穿越' },
+    { value: '奇幻', label: '奇幻' },
+    { value: '架空', label: '架空' },
+    { value: '同人', label: '同人' },
+    { value: '军事', label: '军事' },
+    { value: '现代', label: '现代文学' },
+    { value: '原创', label: '不指定' },
+  ],
+};
 
 interface InitialCharacter {
   name: string;
@@ -95,6 +143,7 @@ export default function CreateStoryPage() {
   const [customDesc, setCustomDesc] = useState('');
   const [customAuthor, setCustomAuthor] = useState('');
   const [customPrompt, setCustomPrompt] = useState('');
+  const [selectedGenre, setSelectedGenre] = useState('');
 
   // C6.9: Era and character fields
   const [selectedEra, setSelectedEra] = useState('');
@@ -155,11 +204,12 @@ export default function CreateStoryPage() {
       const res = await fetch('/api/stories', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          title: customTitle, 
+        body: JSON.stringify({
+          title: customTitle,
           description: customDesc,
           author: customAuthor || '佚名',
           storyType,
+          genre: selectedGenre || undefined,
           prompt: customPrompt,
           era: selectedEra || undefined,
           characters: initialCharacters.filter(c => c.name.trim()).map(c => ({
@@ -348,38 +398,73 @@ export default function CreateStoryPage() {
                       className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] bg-[var(--paper)] text-left flex items-center justify-between hover:border-[var(--gold)]/50 transition-all"
                     >
                       <span className={selectedEra ? 'text-[var(--ink)]' : 'text-[var(--muted)]'}>
-                        {selectedEra ? `${eraOptions.find(e => e.value === selectedEra)?.icon} ${selectedEra}` : '选择朝代...'}
+                        {selectedEra ? `${eraOptions.find(e => e.value === selectedEra)?.icon} ${selectedEra}` : '选择时代...'}
                       </span>
                       <span className="text-[var(--muted)]">▾</span>
                     </button>
                     {showEraPicker && (
-                      <div className="absolute top-full left-0 right-0 mt-1 bg-white rounded-lg border border-[var(--border)] shadow-lg z-10 max-h-60 overflow-y-auto">
-                        <div className="grid grid-cols-4 gap-1 p-2">
-                          {eraOptions.map(era => (
-                            <button
-                              key={era.value}
-                              type="button"
-                              onClick={() => { setSelectedEra(era.value); setShowEraPicker(false); }}
-                              className={`px-3 py-2 rounded-lg text-sm text-left transition-all ${
-                                selectedEra === era.value
-                                  ? 'bg-amber-50 text-amber-800 border border-amber-200'
-                                  : 'hover:bg-gray-50 text-[var(--ink)]'
-                              }`}
-                            >
-                              <span className="mr-1">{era.icon}</span>{era.label}
-                            </button>
-                          ))}
-                        </div>
+                      <div className="absolute top-full left-0 right-0 mt-1 bg-white rounded-lg border border-[var(--border)] shadow-lg z-10 max-h-72 overflow-y-auto">
+                        {['古代', '近现代', '未来', '虚构'].map(group => {
+                          const items = eraOptions.filter(e => e.group === group);
+                          if (items.length === 0) return null;
+                          return (
+                            <div key={group} className="px-2 pt-2 pb-1">
+                              <div className="text-[10px] text-[var(--muted)] px-1 mb-1 tracking-wider">{group}</div>
+                              <div className="grid grid-cols-4 gap-1">
+                                {items.map(era => (
+                                  <button
+                                    key={era.value}
+                                    type="button"
+                                    onClick={() => { setSelectedEra(era.value); setShowEraPicker(false); }}
+                                    className={`px-2 py-1.5 rounded-lg text-sm text-left transition-all ${
+                                      selectedEra === era.value
+                                        ? 'bg-amber-50 text-amber-800 border border-amber-200'
+                                        : 'hover:bg-gray-50 text-[var(--ink)]'
+                                    }`}
+                                  >
+                                    <span className="mr-1">{era.icon}</span>{era.label}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
                     )}
                   </div>
                 </div>
 
+                {/* Genre sub-selector */}
+                {genreOptions[storyType] && (
+                  <div>
+                    <label className="block text-sm font-medium text-[var(--ink)] mb-2">细分体裁</label>
+                    <div className="flex flex-wrap gap-2">
+                      {genreOptions[storyType].map(opt => (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          onClick={() => setSelectedGenre(opt.value === selectedGenre ? '' : opt.value)}
+                          className={`px-3 py-1.5 rounded-full text-sm border transition-all ${
+                            selectedGenre === opt.value
+                              ? 'bg-[var(--gold)]/10 text-[var(--gold)] border-[var(--gold)]/50'
+                              : 'border-[var(--border)] text-[var(--ink)] hover:border-[var(--gold)]/40'
+                          }`}
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
+                    {selectedGenre && (
+                      <p className="text-xs text-[var(--muted)] mt-1.5">已选：<span className="text-[var(--gold)]">{selectedGenre}</span></p>
+                    )}
+                  </div>
+                )}
+
                 <div>
                   <label className="block text-sm font-medium text-[var(--ink)] mb-2">故事类型</label>
                   <select
                     value={storyType}
-                    onChange={(e) => setStoryType(e.target.value)}
+                    onChange={(e) => { setStoryType(e.target.value); setSelectedGenre(''); }}
                     className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] bg-[var(--paper)] text-[var(--ink)] focus:outline-none focus:ring-2 focus:ring-[var(--gold)] focus:border-transparent transition-all"
                   >
                     {storyTypes.map(type => (

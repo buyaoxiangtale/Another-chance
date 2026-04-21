@@ -809,9 +809,23 @@ export default function StoryDetailPage({ params }: { params: { id: string } }) 
               </div>
             </div>
 
+            {/* Pacing controls — always visible when segments exist, before the continue button */}
+            {segments.length > 0 && (
+              <div className="mt-8">
+                <PacingControls
+                  config={pacingConfig}
+                  onChange={setPacingConfig}
+                  onPause={handlePause}
+                  onResume={handleResume}
+                  isPaused={isPaused}
+                  isContinuing={continuing}
+                />
+              </div>
+            )}
+
             {/* Bottom action bar */}
             {segments.length > 0 && (
-              <div className="mt-12 text-center">
+              <div className="mt-6 text-center">
                 <div className="divider-ornament mb-6"><span>✦</span></div>
                 <button
                   onClick={handleContinue}
@@ -846,19 +860,6 @@ export default function StoryDetailPage({ params }: { params: { id: string } }) 
             </div>
           )}
         </div>
-
-        {/* C6.4: Pacing controls */}
-        {(continuing || newContent) && (
-          <div className="mt-8">
-            <PacingControls
-              config={pacingConfig}
-              onChange={setPacingConfig}
-              onPause={handlePause}
-              onResume={handleResume}
-              isPaused={isPaused}
-            />
-          </div>
-        )}
       </div>
 
       {showBranchDialog && branchDialog}

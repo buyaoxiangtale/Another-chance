@@ -8,6 +8,8 @@ interface PacingControlsProps {
   onPause?: () => void;
   onResume?: () => void;
   isPaused?: boolean;
+  /** Whether a continuation is currently in progress */
+  isContinuing?: boolean;
   disabled?: boolean;
 }
 
@@ -19,15 +21,17 @@ const paceOptions: { value: PacingPace; label: string; desc: string }[] = [
 ];
 
 export default function PacingControls({
-  config, onChange, onPause, onResume, isPaused = false, disabled = false,
+  config, onChange, onPause, onResume, isPaused = false, isContinuing = false, disabled = false,
 }: PacingControlsProps) {
   return (
     <div
       className={`rounded-xl border border-[var(--border)] bg-white/70 backdrop-blur-sm p-5 space-y-4 shadow-sm ${disabled ? 'opacity-50 pointer-events-none' : ''}`}
     >
       <div className="flex items-center justify-between">
-        <h4 className="text-sm font-semibold text-[var(--ink)] tracking-wide">节奏控制</h4>
-        {isPaused !== undefined && (
+        <h4 className="text-sm font-semibold text-[var(--ink)] tracking-wide">
+          {isContinuing ? '节奏控制' : '续写设置'}
+        </h4>
+        {isContinuing && isPaused !== undefined && (
           <button
             onClick={isPaused ? onResume : onPause}
             className={`px-3 py-1 rounded-full text-xs font-medium transition-all border ${

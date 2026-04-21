@@ -6,9 +6,11 @@ import { getOrderedChain } from '@/lib/chain-helpers';
 import { buildFullPrompt } from '@/lib/prompt-builder';
 import { PacingEngine } from '@/lib/pacing-engine';
 import { consistencyChecker } from '@/lib/consistency-checker';
-import { callAI, buildOpenAIRequest, aiRequestQueue } from '@/lib/ai-client';
+import { callAI, callAIText, buildOpenAIRequest, aiRequestQueue } from '@/lib/ai-client';
 import { contextSummarizer } from '@/lib/context-summarizer';
 import { generateImagesForSegment } from '@/lib/image-generator';
+import { characterManager } from '@/lib/character-engine';
+import { directorManager } from '@/lib/director-manager';
 
 export async function POST(
   request: NextRequest,
@@ -155,6 +157,24 @@ export async function POST(
             return;
           }
 
+          // 记忆连贯性：发现并自动注册新角色；返回"段落中所有角色（含新注册）"
+          let mentionedIds: string[] = [];
+          try {
+            const mentioned = await characterManager.discoverAndRegisterCharacters(
+              storyId,
+              fullContent,
+              (p: string) => callAIText(p, { maxTokens: 300, story: story as any }),
+              {
+                genre: story.genre ?? undefined,
+                storyDescription: story.description ?? undefined,
+                callAIWithWebSearchFn: (p: string) => callAIText(p, { maxTokens: 600, story: story as any, webSearch: true }),
+              },
+            );
+            mentionedIds = mentioned.map(c => c.id);
+          } catch (e) {
+            console.warn('[stream-continue] 角色发现/注册失败:', e);
+          }
+
           const newSegment = await prisma.storySegment.create({
             data: {
               storyId,
@@ -167,11 +187,28 @@ export async function POST(
               narrativePace: pacingConfig?.pace,
               mood: pacingConfig?.mood,
               visibility: story.visibility,
+              characterIds: mentionedIds,
             },
           });
 
           contextSummarizer.generateSegmentSummary(newSegment as any, [...chain, newSegment] as any, story?.genre ?? undefined)
             .catch((e: any) => console.warn('[stream-continue] 摘要预生成失败:', e));
+
+          // 更新被提及角色的当前状态（AI 推断 → stateHistory）
+          if (mentionedIds.length > 0) {
+            characterManager
+              .inferAndUpdateStatesForSegment(storyId, newSegment.id, fullContent, (p: string) =>
+                callAIText(p, { maxTokens: 300, story: story as any })
+              )
+              .catch((e: any) => console.warn('[stream-continue] 角色状态更新失败:', e));
+          }
+
+          // 方案 A：增量更新滚动场景状态（location/time/weather/在场角色/服装）
+          directorManager
+            .updateSceneState(storyId, fullContent, (p: string) =>
+              callAIText(p, { maxTokens: 400, story: story as any })
+            )
+            .catch((e: any) => console.warn('[stream-continue] 场景状态更新失败:', e));
 
           try {
             const postIssues = await consistencyChecker.runConsistencyCheck(newSegment as any, [...chain, newSegment] as any);

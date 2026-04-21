@@ -356,7 +356,7 @@ class ContextSummarizer {
           segmentId: existing.segmentId,
         });
       } else {
-        const result = await this.generateSegmentSummary(seg, chain);
+        const result = await this.generateSegmentSummary(seg, chain, genre);
         olderSummaries.push({
           summaryText: result.summaryText,
           metadata: result.metadata,
@@ -492,9 +492,9 @@ ${groupTexts}
   /**
    * 1.6 根据 token 预算返回最优上下文
    */
-  async getContextForPrompt(chain: StorySegment[], tokenBudget: number): Promise<string> {
+  async getContextForPrompt(chain: StorySegment[], tokenBudget: number, genre?: string): Promise<string> {
     const { fullTextSegments, groupSummaries, chapterSummaries } =
-      await this.buildHierarchicalContext(chain, tokenBudget);
+      await this.buildHierarchicalContext(chain, tokenBudget, 5, 5, genre);
 
     const parts: string[] = [];
 

@@ -168,6 +168,7 @@ export async function buildFullPrompt(options: BuildPromptOptions): Promise<stri
   }
 
   // ─── 1.5 风格覆盖指令：当虚构类型的前文却用了古风文体时，强制覆盖 ───
+  let styleOverrideActive = false;
   if (isFiction && effectiveGenre !== '武侠' && effectiveGenre !== '仙侠' && effectiveGenre !== '玄幻') {
     // 检测前文是否用了古风文体（抽样最近 2 段）
     const recentText = chain.slice(-2).map(s => s.content).join('');
@@ -176,7 +177,8 @@ export async function buildFullPrompt(options: BuildPromptOptions): Promise<stri
     const isGufeng = gufengCount >= 5;
 
     if (isGufeng) {
-      console.log(`  \x1b[35m→ 前文古风检测:\x1b[0m 检测到 ${gufengCount}/15 古风信号词，注入风格覆盖指令`);
+      styleOverrideActive = true;
+      console.log(`  \x1b[35m→ 前文古风检测:\x1b[0m 检测到 ${gufengCount}/15 古风信号词，注入风格覆盖指令（并跳过 styleAnchor）`);
       parts.push(
         `【风格覆盖指令 — 最高优先级】\n` +
         `本作品属于"${effectiveGenre || '虚构'}"类型，必须使用现代白话文写作。\n` +
@@ -193,8 +195,11 @@ export async function buildFullPrompt(options: BuildPromptOptions): Promise<stri
   parts.push(metaLines.join('\n'));
 
   // ─── 3. 风格锚点（少样本） ───
-  const styleAnchor = buildStyleAnchor(chain);
-  if (styleAnchor) parts.push(styleAnchor);
+  // 风格覆盖激活时跳过 styleAnchor，避免模型被前文古风"反向模仿"
+  if (!styleOverrideActive) {
+    const styleAnchor = buildStyleAnchor(chain);
+    if (styleAnchor) parts.push(styleAnchor);
+  }
 
   // 先计算动态预算所需标记
   const characterIds: string[] = (story as any)?.characterIds || [];
@@ -268,7 +273,7 @@ export async function buildFullPrompt(options: BuildPromptOptions): Promise<stri
   let contextText = '';
   if (chain.length > 0) {
     try {
-      contextText = await contextSummarizer.getContextForPrompt(chain as any, budgets.contextHistory);
+      contextText = await contextSummarizer.getContextForPrompt(chain as any, budgets.contextHistory, effectiveGenre);
     } catch {
       contextText = chain.map(s =>
         `${s.title ? `【${s.title}】` : ''}${s.content}`

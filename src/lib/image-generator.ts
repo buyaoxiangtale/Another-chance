@@ -332,10 +332,10 @@ async function callImageAPI(prompt: string, config: ImageGeneratorConfig, seed?:
 // ─── 风格分析（启发式） ────────────────────────────────────────────────
 
 const STYLE_RULES: { keywords: string[]; style: ConcreteImageStyle; reason: string }[] = [
-  { keywords: ['宫廷', '贵族', '后宫', '妃', '嫔', '皇后', '太子', '朝堂', '御', '殿上', '锦衣', '华服', '玉玺', '龙袍'], style: 'gongbi', reason: '宫廷贵族题材，工笔画风格更能展现华美细节' },
-  { keywords: ['战争', '沙场', '军事', '兵', '军', '战', '攻城', '征伐', '将军', '铁骑', '战马', '烽火', '刀兵', '甲胄'], style: 'historical-realistic', reason: '战争军事题材，写实风格更具史诗感' },
+  { keywords: ['宫廷', '贵族', '后宫', '妃嫔', '皇后', '太子', '朝堂', '殿上', '锦衣', '华服', '玉玺', '龙袍', '御膳', '御花园', '金銮殿'], style: 'gongbi', reason: '宫廷贵族题材，工笔画风格更能展现华美细节' },
+  { keywords: ['战争', '沙场', '攻城', '征伐', '铁骑', '战马', '烽火', '刀兵', '甲胄', '兵马', '兵临城下', '调兵', '兵符'], style: 'historical-realistic', reason: '战争军事题材，写实风格更具史诗感' },
   { keywords: ['隐逸', '山水', '田园', '诗酒', '竹林', '垂钓', '归隐', '悠然', '琴棋', '煮茶', '渔舟', '采菊'], style: 'ink-wash', reason: '山水田园题材，水墨画最能表达诗意' },
-  { keywords: ['宗教', '佛', '道', '西域', '丝绸之路', '敦煌', '飞天', '梵', '寺', '僧', '袈裟', '石窟', '胡人'], style: 'dunhuang-mural', reason: '宗教西域题材，敦煌壁画风格最为贴切' },
+  { keywords: ['宗教', '佛教', '道教', '道士', '道观', '西域', '丝绸之路', '敦煌', '飞天', '梵文', '僧人', '袈裟', '石窟', '胡人', '佛寺', '佛经', '佛法', '寺庙', '和尚', '菩萨', '罗汉', '金刚'], style: 'dunhuang-mural', reason: '宗教西域题材，敦煌壁画风格最为贴切' },
 ];
 
 function countKeywordMatches(text: string, keywords: string[]): number {
@@ -374,6 +374,7 @@ export function analyzeStoryStyle(storyContent: string): {
       recommendedStyle: autoStyle,
       reason: '未检测到强烈的细分历史风格信号，按故事题材自动推荐',
       confidence: 0.4,
+      allScores: computeAllScores(text),
     };
   }
 
@@ -492,6 +493,85 @@ export async function generateImagesForSegment(
   if (scenes.length === 0) {
     console.warn('[image-generator] 未从段落中提取到有效场景描述');
     return [];
+  }
+
+  // 2.3 如果场景 prompt 含中文（启发式回退），用 AI 翻译为英文 diffusion prompt，
+  //     避免后续 enforceNoTextInPrompt 把场景内容全部剥掉导致只剩风格模板
+  const scenesHaveCJK = scenes.some(s => /[\u4e00-\u9fff]/.test(s.prompt));
+  if (scenesHaveCJK) {
+    let translated = false;
+
+    // 优先：用 AI 翻译
+    if (callAIFn) {
+      try {
+        const descList = scenes.map((s, i) => `[${i}] (${s.type}) ${s.description}`).join('\n');
+        const translatePrompt =
+          `Translate the Chinese scene descriptions below into English diffusion prompts (60-100 words each: subject, action, environment, lighting, camera angle, mood). Output ONLY a JSON array of strings, same order, no markdown.\n\n${descList}`;
+
+        const transText = await callAIFn(translatePrompt);
+        if (transText && transText.trim()) {
+          const transMatch = transText.match(/\[[\s\S]*\]/);
+          if (transMatch) {
+            const enPrompts: unknown[] = JSON.parse(transMatch[0]);
+            if (Array.isArray(enPrompts) && enPrompts.some(p => typeof p === 'string')) {
+              scenes = scenes.map((s, i) => ({
+                ...s,
+                prompt: typeof enPrompts[i] === 'string'
+                  ? (enPrompts[i] as string).trim()
+                  : s.prompt,
+              }));
+              translated = true;
+              console.log('[image-generator] 启发式场景已翻译为英文 prompt');
+            }
+          }
+        } else {
+          console.warn('[image-generator] AI 翻译返回空响应');
+        }
+      } catch (e) {
+        console.warn('[image-generator] heuristic 场景翻译失败:', e);
+      }
+    }
+
+    // 兜底：AI 翻译也失败时，用 sceneStateEn + genre + segmentContent 拼接英文 prompt
+    // 比 enforceNoTextInPrompt 剥光所有中文后只剩风格模板要好得多
+    if (!translated) {
+      console.warn('[image-generator] AI 翻译失败，使用 sceneStateEn + genre 兜底构建英文 prompt');
+      scenes = scenes.map((scene) => {
+        const parts: string[] = [];
+        // 类型镜头前缀
+        const typeHint: Record<string, string> = {
+          scene: 'A wide cinematic scene',
+          character: 'A character portrait',
+          object: 'A close-up detailed shot',
+        };
+        parts.push(typeHint[scene.type] || 'A cinematic scene');
+
+        // 用 sceneStateEn 补充环境描述
+        if (sceneStateEn && sceneStateEn.trim()) {
+          parts.push(`environment: ${sceneStateEn.trim()}`);
+        }
+
+        // 用 genre 补充题材
+        if (genre) {
+          parts.push(`genre: ${genre}`);
+        }
+
+        // 用 storyDescription 补充故事背景
+        if (storyDescription) {
+          // 取前100字符的英文概要
+          parts.push(`story context: ${storyDescription.slice(0, 100)}`);
+        }
+
+        // 用段落内容的前80字作为粗略场景参考（会被 enforceNoTextInPrompt 剥掉中文，
+        // 但英文部分会保留）
+        const segSnippet = segmentContent.slice(0, 80);
+
+        return {
+          ...scene,
+          prompt: `${parts.join(', ')}, ${segSnippet}`,
+        };
+      });
+    }
   }
 
   // 并行生成所有镜头：每个镜头独立重试 + 独立降级，避免一张失败拖累整体
@@ -637,10 +717,49 @@ ${segment.slice(0, 1500)}`;
 
   try {
     const text = await callAIFn(prompt);
-    const jsonMatch = text.match(/\[[\s\S]*\]/);
-    if (!jsonMatch) throw new Error('无法解析 AI 返回的 JSON');
 
-    const parsed = JSON.parse(jsonMatch[0]) as Array<{
+    // ── 健壮 JSON 解析：兼容 markdown 包裹、截断响应等 ──
+    let jsonStr: string | null = null;
+
+    // 1. 直接正则匹配
+    const directMatch = text.match(/\[[\s\S]*\]/);
+    if (directMatch) {
+      jsonStr = directMatch[0];
+    }
+
+    // 2. 剥离 markdown 代码块后再匹配（```json ... ```）
+    if (!jsonStr) {
+      const stripped = text
+        .replace(/^```(?:json)?\s*\n?/i, '')
+        .replace(/\n?```\s*$/i, '')
+        .trim();
+      const strippedMatch = stripped.match(/\[[\s\S]*\]/);
+      if (strippedMatch) {
+        jsonStr = strippedMatch[0];
+      }
+    }
+
+    // 3. 尝试修复截断 JSON（找到 [ 和最后一个 }，手动闭合 ]
+    if (!jsonStr) {
+      const startIdx = text.indexOf('[');
+      const lastObjClose = text.lastIndexOf('}');
+      if (startIdx >= 0 && lastObjClose > startIdx) {
+        const candidate = text.slice(startIdx, lastObjClose + 1) + ']';
+        try {
+          JSON.parse(candidate);
+          jsonStr = candidate;
+        } catch {
+          // 修复失败，继续
+        }
+      }
+    }
+
+    if (!jsonStr) {
+      console.warn(`[image-generator] AI 返回内容无法解析为 JSON，前200字: ${text.slice(0, 200)}`);
+      throw new Error('无法解析 AI 返回的 JSON');
+    }
+
+    const parsed = JSON.parse(jsonStr) as Array<{
       description: string;
       enPrompt?: string;
       type?: 'scene' | 'character' | 'object';

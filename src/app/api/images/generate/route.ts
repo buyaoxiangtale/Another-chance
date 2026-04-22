@@ -195,18 +195,13 @@ export async function POST(request: NextRequest) {
       callAIFn: (p: string) => callAIText(p, { maxTokens: 800 }),
     });
 
-    // 更新段落的 imageUrls 到数据库（追加而非覆盖，保留历史插图）
+    // 更新段落的 imageUrls 到数据库（替换旧图，只保留最新一次生成的插图）
     if (images.length > 0) {
       try {
-        const current = await prisma.storySegment.findUnique({
-          where: { id: segmentId },
-          select: { imageUrls: true },
-        });
-        const prevUrls: string[] = Array.isArray(current?.imageUrls) ? (current!.imageUrls as string[]) : [];
         const newUrls = images.map(img => img.url);
         await prisma.storySegment.update({
           where: { id: segmentId },
-          data: { imageUrls: [...prevUrls, ...newUrls] },
+          data: { imageUrls: newUrls },
         });
       } catch (e) {
         console.warn('[images/generate] 更新段落 imageUrls 失败:', e);

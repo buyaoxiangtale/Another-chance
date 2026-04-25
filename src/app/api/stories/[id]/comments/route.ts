@@ -13,44 +13,40 @@ export async function GET(
     const page = parseInt(searchParams.get('page') || '1', 10);
     const limit = parseInt(searchParams.get('limit') || '20', 10);
 
-    const comments = await prisma.comment.findMany({
-      where: { storyId, parentId: null },
+    // Fetch all comments flat, then build tree for unlimited depth
+    const allComments = await prisma.comment.findMany({
+      where: { storyId },
       include: {
         user: { select: { id: true, name: true, image: true } },
-        replies: {
-          include: {
-            user: { select: { id: true, name: true, image: true } },
-            replies: {
-              include: {
-                user: { select: { id: true, name: true, image: true } },
-                replies: {
-                  include: {
-                    user: { select: { id: true, name: true, image: true } },
-                    _count: { select: { likes: true } },
-                  },
-                },
-                _count: { select: { likes: true } },
-              },
-            },
-            _count: { select: { likes: true } },
-          },
-        },
         _count: { select: { likes: true } },
       },
       orderBy: { createdAt: 'desc' },
-      skip: (page - 1) * limit,
-      take: limit,
     });
 
-    const total = await prisma.comment.count({
-      where: { storyId, parentId: null },
-    });
+    // Build tree from flat list
+    const commentMap = new Map<string, any>();
+    const roots: any[] = [];
+    for (const c of allComments) {
+      commentMap.set(c.id, { ...c, replies: [] });
+    }
+    for (const c of allComments) {
+      const node = commentMap.get(c.id)!;
+      if (c.parentId && commentMap.has(c.parentId)) {
+        commentMap.get(c.parentId)!.replies.push(node);
+      } else {
+        roots.push(node);
+      }
+    }
+
+    // Paginate top-level comments
+    const total = roots.length;
+    const paginatedRoots = roots.slice((page - 1) * limit, page * limit);
 
     // Get current user's likes on these comments
     const userId = await getUserIdFromRequest(request);
     let likedCommentIds = new Set<string>();
     if (userId) {
-      const allCommentIds = collectCommentIds(comments);
+      const allCommentIds = collectCommentIds(paginatedRoots);
       if (allCommentIds.length > 0) {
         const likes = await prisma.commentLike.findMany({
           where: { userId, commentId: { in: allCommentIds } },
@@ -60,7 +56,7 @@ export async function GET(
       }
     }
 
-    const commentsWithLiked = userId ? markLiked(comments, likedCommentIds) : comments;
+    const commentsWithLiked = userId ? markLiked(paginatedRoots, likedCommentIds) : paginatedRoots;
 
     return NextResponse.json({
       success: true,
@@ -93,24 +89,14 @@ export async function POST(
       return NextResponse.json({ error: '评论内容不能超过2000字' }, { status: 400 });
     }
 
-    // If replying, verify parent exists and depth < 3
+    // If replying, verify parent exists
     if (parentId) {
       const parent = await prisma.comment.findUnique({
         where: { id: parentId },
-        select: { parentId: true, storyId: true },
+        select: { storyId: true },
       });
       if (!parent || parent.storyId !== storyId) {
         return NextResponse.json({ error: '回复目标不存在' }, { status: 404 });
-      }
-      // Check depth: parent -> grandparent -> great-grandparent
-      if (parent.parentId) {
-        const grandparent = await prisma.comment.findUnique({
-          where: { id: parent.parentId },
-          select: { parentId: true },
-        });
-        if (grandparent?.parentId) {
-          return NextResponse.json({ error: '回复层级最多3层' }, { status: 400 });
-        }
       }
     }
 

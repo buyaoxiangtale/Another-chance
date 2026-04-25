@@ -25,6 +25,7 @@ interface Story {
   visibility?: string;
   likeCount?: number;
   isLiked?: boolean;
+  coverImageUrl?: string;
 }
 
 export default function StoryDetailPage({ params }: { params: { id: string } }) {
@@ -652,6 +653,16 @@ export default function StoryDetailPage({ params }: { params: { id: string } }) 
 
       {/* Story title */}
       <div className="max-w-3xl mx-auto px-6 pt-12 pb-8 text-center">
+        {story.coverImageUrl && (
+          <div className="mb-6 flex justify-center">
+            <img
+              src={story.coverImageUrl}
+              alt={story.title}
+              className="w-48 h-auto rounded-lg shadow-lg object-cover"
+              style={{ aspectRatio: '1 / 1' }}
+            />
+          </div>
+        )}
         <div className="divider-ornament mb-4"><span>✦</span></div>
         <h1 className="text-3xl md:text-4xl font-bold text-[var(--ink)] tracking-widest mb-3">{story.title}</h1>
         {story.description && <p className="text-[var(--muted)] text-sm">{story.description}</p>}

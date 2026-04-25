@@ -43,8 +43,12 @@ export async function DELETE(
       return NextResponse.json({ error: '评论不存在' }, { status: 404 });
     }
 
-    if (comment.userId !== userId) {
-      return NextResponse.json({ error: '只能删除自己的评论' }, { status: 403 });
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { isAdmin: true },
+    });
+    if (comment.userId !== userId && !user?.isAdmin) {
+      return NextResponse.json({ error: '无权删除此评论' }, { status: 403 });
     }
 
     // Delete replies first (cascade), then the comment

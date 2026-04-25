@@ -44,13 +44,14 @@ export const FICTION_KEYWORDS = [
   '原创', '现代', '军事',
 ];
 
-/** 创建页面 storyType → genre 映射 */
-export const STORY_TYPE_TO_GENRE: Record<string, string> = {
-  historical: '正史',
-  legend: '演义',
-  literary: '现代',
-  original: '原创',
-};
+/** 首页故事分类 Tab（用于故事列表筛选，key 对应 Story.storyType 字段） */
+export const STORY_CATEGORY_TABS = [
+  { key: 'all', label: '全部' },
+  { key: 'history', label: '历史' },
+  { key: 'fantasy', label: '幻想' },
+  { key: 'mystery', label: '悬疑' },
+  { key: 'fanfic', label: '同人' },
+] as const;
 
 /** 分类结果 */
 export type GenreClassification = {

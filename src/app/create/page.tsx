@@ -54,10 +54,10 @@ const storyTemplates = [
 ];
 
 const storyTypes = [
-  { id: 'historical', name: '历史分叉', description: '基于真实历史的关键转折点' },
-  { id: 'legend', name: '神话传说', description: '古典神话的另一种可能' },
-  { id: 'literary', name: '文学名著', description: '经典文学作品的续写' },
-  { id: 'original', name: '原创故事', description: '完全原创的分叉故事' }
+  { id: 'history', name: '历史', description: '历史演义、军事战争、穿越重生', icon: '🏯' },
+  { id: 'fantasy', name: '幻想', description: '玄幻仙侠、科幻末世、奇幻武侠', icon: '✨' },
+  { id: 'mystery', name: '悬疑', description: '推理探案、都市生活、现当代故事', icon: '🔍' },
+  { id: 'fanfic', name: '同人', description: '动漫小说影视游戏等已知 IP 的二创', icon: '📖' },
 ];
 
 // C6.9: Dynasty/era options — 古代 + 现代/未来
@@ -86,42 +86,31 @@ const eraOptions = [
 
 /** 细分体裁选项 — 根据故事类型动态展示 */
 const genreOptions: Record<string, { value: string; label: string }[]> = {
-  historical: [
+  history: [
     { value: '正史', label: '正史' },
     { value: '演义', label: '演义' },
     { value: '架空', label: '架空历史' },
     { value: '穿越', label: '穿越' },
     { value: '军事', label: '军事' },
   ],
-  legend: [
-    { value: '演义', label: '演义' },
-    { value: '武侠', label: '武侠' },
-    { value: '仙侠', label: '仙侠' },
+  fantasy: [
     { value: '玄幻', label: '玄幻' },
+    { value: '仙侠', label: '仙侠' },
+    { value: '武侠', label: '武侠' },
     { value: '奇幻', label: '奇幻' },
-  ],
-  literary: [
-    { value: '同人', label: '同人' },
-    { value: '悬疑', label: '悬疑推理' },
-    { value: '都市', label: '都市' },
-    { value: '现代', label: '现代文学' },
-    { value: '军事', label: '军事' },
-  ],
-  original: [
-    { value: '都市', label: '都市' },
-    { value: '悬疑', label: '悬疑推理' },
-    { value: '玄幻', label: '玄幻' },
-    { value: '仙侠', label: '仙侠' },
-    { value: '武侠', label: '武侠' },
     { value: '科幻', label: '科幻' },
     { value: '末世', label: '末世' },
-    { value: '穿越', label: '穿越' },
-    { value: '奇幻', label: '奇幻' },
-    { value: '架空', label: '架空' },
-    { value: '同人', label: '同人' },
-    { value: '军事', label: '军事' },
+  ],
+  mystery: [
+    { value: '悬疑', label: '悬疑推理' },
+    { value: '都市', label: '都市' },
     { value: '现代', label: '现代文学' },
-    { value: '原创', label: '不指定' },
+    { value: '军事', label: '军事' },
+  ],
+  fanfic: [
+    { value: '同人', label: '同人' },
+    { value: '架空', label: '架空' },
+    { value: '穿越', label: '穿越' },
   ],
 };
 
@@ -135,14 +124,13 @@ export default function CreateStoryPage() {
   const router = useRouter();
   const { data: session, status: sessionStatus } = useSession();
   const [tab, setTab] = useState<'template' | 'custom'>('template');
-  const [storyType, setStoryType] = useState('historical');
+  const [storyType, setStoryType] = useState('history');
   const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
   const [selectedPrompt, setSelectedPrompt] = useState<string>('');
   const [creating, setCreating] = useState(false);
   const [customTitle, setCustomTitle] = useState('');
   const [customDesc, setCustomDesc] = useState('');
   const [customAuthor, setCustomAuthor] = useState('');
-  const [customPrompt, setCustomPrompt] = useState('');
   const [selectedGenre, setSelectedGenre] = useState('');
 
   // C6.9: Era and character fields
@@ -210,7 +198,7 @@ export default function CreateStoryPage() {
           author: customAuthor || '佚名',
           storyType,
           genre: selectedGenre || undefined,
-          prompt: customPrompt,
+          prompt: customDesc,
           era: selectedEra || undefined,
           characters: initialCharacters.filter(c => c.name.trim()).map(c => ({
             name: c.name,
@@ -265,14 +253,17 @@ export default function CreateStoryPage() {
             {storyTypes.map((type) => (
               <button
                 key={type.id}
-                onClick={() => setStoryType(type.id)}
+                onClick={() => { setStoryType(type.id); setSelectedGenre(''); }}
                 className={`p-4 rounded-xl border-2 transition-all text-left ${
                   storyType === type.id
                     ? 'border-[var(--gold)] bg-amber-50 shadow-md scale-[1.02]'
                     : 'border-[var(--border)] hover:border-[var(--gold)]/50 hover:shadow-md'
                 }`}
               >
-                <h4 className="font-bold text-[var(--ink)] mb-2">{type.name}</h4>
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-xl">{(type as any).icon}</span>
+                  <h4 className="font-bold text-[var(--ink)]">{type.name}</h4>
+                </div>
                 <p className="text-xs text-[var(--muted)]">{type.description}</p>
               </button>
             ))}
@@ -378,12 +369,12 @@ export default function CreateStoryPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-[var(--ink)] mb-2">故事描述</label>
+                  <label className="block text-sm font-medium text-[var(--ink)] mb-2">故事设定与方向</label>
                   <textarea
                     value={customDesc}
                     onChange={e => setCustomDesc(e.target.value)}
-                    placeholder="描述故事的背景和设定..."
-                    rows={4}
+                    placeholder="描述故事的世界观、角色设定，以及你希望故事如何发展...&#10;例如：三国时期，如果诸葛亮在五丈原没有病逝，蜀汉能否北伐成功？"
+                    rows={5}
                     className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] bg-[var(--paper)] text-[var(--ink)] placeholder-[var(--muted)] focus:outline-none focus:ring-2 focus:ring-[var(--gold)] focus:border-transparent transition-all resize-none"
                   />
                 </div>
@@ -460,19 +451,6 @@ export default function CreateStoryPage() {
                   </div>
                 )}
 
-                <div>
-                  <label className="block text-sm font-medium text-[var(--ink)] mb-2">故事类型</label>
-                  <select
-                    value={storyType}
-                    onChange={(e) => { setStoryType(e.target.value); setSelectedGenre(''); }}
-                    className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] bg-[var(--paper)] text-[var(--ink)] focus:outline-none focus:ring-2 focus:ring-[var(--gold)] focus:border-transparent transition-all"
-                  >
-                    {storyTypes.map(type => (
-                      <option key={type.id} value={type.id}>{type.name}</option>
-                    ))}
-                  </select>
-                </div>
-
                 {/* C6.9: Initial characters */}
                 <div>
                   <div className="flex items-center justify-between mb-2">
@@ -531,16 +509,6 @@ export default function CreateStoryPage() {
                   </div>
                 </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-[var(--ink)] mb-2">思考方向/提示词</label>
-                  <textarea
-                    value={customPrompt}
-                    onChange={e => setCustomPrompt(e.target.value)}
-                    placeholder="描述你希望故事如何发展，或者提供一些创作思路..."
-                    rows={3}
-                    className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] bg-[var(--paper)] text-[var(--ink)] placeholder-[var(--muted)] focus:outline-none focus:ring-2 focus:ring-[var(--gold)] focus:border-transparent transition-all resize-none"
-                  />
-                </div>
                 <div>
                   <label className="block text-sm font-medium text-[var(--ink)] mb-2">作者</label>
                   <input

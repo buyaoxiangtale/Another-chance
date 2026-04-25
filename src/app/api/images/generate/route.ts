@@ -84,10 +84,7 @@ export async function POST(request: NextRequest) {
         if (wv.fandom_seeded && wv.fandom_name) {
           const cached = await getCachedReferenceImages(wv.fandom_name);
           if (cached.length > 0) {
-            referenceImageHints = cached.map(img => ({
-              localPath: img.localPath,
-              characterName: img.characterName,
-            }));
+            referenceImageHints = cached;
           } else {
             // 异步搜索，不阻塞当前图片生成
             const characterNames = (await characterManager.list(storyIdForChars))

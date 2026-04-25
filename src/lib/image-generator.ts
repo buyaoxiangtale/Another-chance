@@ -46,7 +46,7 @@ export interface ImageGeneratorConfig {
 
 // ─── 2.3 风格 Prompt 模板 ────────────────────────────────────────────
 
-const STYLE_TEMPLATES: Record<ConcreteImageStyle, string> = {
+export const STYLE_TEMPLATES: Record<ConcreteImageStyle, string> = {
   'historical-realistic':
     'Chinese historical realistic painting, highly detailed, accurate ancient Chinese architecture and hanfu costumes, warm oil-paint lighting, cinematic composition',
 
@@ -79,7 +79,7 @@ const STYLE_TEMPLATES: Record<ConcreteImageStyle, string> = {
 };
 
 /** 根据故事 genre / 段落内容自动选择风格 */
-function autoPickStyle(
+export function autoPickStyle(
   genre?: string,
   description?: string,
   segmentContent?: string,
@@ -210,7 +210,7 @@ function applyStylePrompt(
  *  3. 在开头注入强抑制指令，让模型在生成早期就确立"无文字"的主方向
  *  4. 在末尾幂等地追加英文 no-text 后缀
  */
-function enforceNoTextInPrompt(rawPrompt: string): string {
+export function enforceNoTextInPrompt(rawPrompt: string): string {
   let p = rawPrompt || '';
 
   // 1. 去掉中日韩字符 —— 扩散模型看到中文/日文极易尝试把它"绘制"进画面

@@ -1,328 +1,42 @@
 /**
- * D1: 同人 IP 参考图搜索模块
+ * D1: 同人 IP 参考图搜索管线
  *
- * 分层搜索策略：
- * 1. 本地 JSON 缓存（零延迟）
- * 2. Serper.dev 图片搜索（复用已有 API Key）
- * 3. Fandom Wiki MediaWiki API（免费、权威）
- * 4. LLM 文字外观兜底（现有逻辑，不改变）
+ * 功能：
+ * - 根据故事 genre / description 检测同人 IP
+ * - 分层搜索策略：本地 JSON 缓存 → Serper.dev 图片搜索 → Fandom Wiki MediaWiki API
+ * - 下载并缓存参考图到 public/reference-images/
+ * - 导出供 images/generate/route.ts 和 image-generator.ts 使用
  */
 
-import { webSearch, hasExplicitWebSearch } from './web-search';
+import { join } from 'path';
 import { writeFile, mkdir, readFile } from 'fs/promises';
 import { existsSync } from 'fs';
-import { join } from 'path';
-import { createHash } from 'crypto';
 
-// ─── 类型定义 ────────────────────────────────────────────────────
+// ─── 配置 ───────────────────────────────────────────────────────────
 
-export interface ReferenceImage {
-  /** 本地缓存路径（如 /reference-images/naruto/obito_abc123.webp） */
-  localPath: string;
-  /** 原始 URL */
-  sourceUrl: string;
-  /** 关联角色名 */
-  characterName?: string;
-  /** IP 名称 */
-  fandomName: string;
-  /** 缓存时间 ISO */
-  cachedAt: string;
-  /** 图片尺寸（字节） */
-  size: number;
-}
-
-export interface ReferenceImageHint {
-  localPath: string;
-  characterName?: string;
-}
-
-export interface FandomImageCache {
-  fandomName: string;
-  fandomNameEn: string;
-  images: ReferenceImage[];
-  searchedAt: string;
-}
-
-// ─── 配置 ─────────────────────────────────────────────────────────
-
-const REF_DIR = join(process.cwd(), 'public', 'reference-images');
-const CACHE_INDEX_FILE = join(process.cwd(), 'data', 'reference-image-cache.json');
+const REF_CACHE_DIR = join(process.cwd(), 'public', 'reference-images');
+const REF_META_FILE = join(process.cwd(), 'data', 'reference-images-cache.json');
+const ENABLED = (process.env.ENABLE_REFERENCE_IMAGE_SEARCH || 'true') === 'true';
+const CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 const MAX_IMAGES_PER_IP = 20;
 const MAX_IMAGE_SIZE = 2 * 1024 * 1024; // 2MB
-const CACHE_TTL_DAYS = 30;
+const SERPER_API_KEY = process.env.SERPER_API_KEY || '';
+const SERPER_ENDPOINT = 'https://google.serper.dev/images';
 
-/** 是否启用参考图搜索（需显式配置环境变量） */
-function isEnabled(): boolean {
-  return (process.env.ENABLE_REFERENCE_IMAGE_SEARCH || '').toLowerCase() === 'true';
+/** 参考图提示信息 */
+export interface ReferenceImageHint {
+  /** 角色名（可选，若为群像则留空） */
+  characterName?: string;
+  /** 本地缓存路径（public/... 开头的相对 URL） */
+  localPath: string;
+  /** 来源 URL */
+  sourceUrl: string;
+  /** 关联的 IP 名 */
+  fandomName: string;
 }
 
-// ─── 核心搜索接口 ─────────────────────────────────────────────────
+// ─── Fandom Wiki 子域名映射 ────────────────────────────────────────
 
-/**
- * 为指定同人 IP 搜索角色参考图。
- * 优先从本地缓存读取，缓存未命中或过期时在线搜索。
- */
-export async function searchReferenceImages(
-  fandomName: string,
-  fandomNameEn: string,
-  characterNames: string[] = [],
-): Promise<ReferenceImage[]> {
-  if (!isEnabled()) return [];
-
-  // 1. 检查本地缓存
-  const cached = await loadCacheIndex();
-  const key = fandomName;
-  const entry = cached[key];
-  if (entry && !isExpired(entry.searchedAt)) {
-    return filterByCharacters(entry.images, characterNames);
-  }
-
-  // 2. 在线搜索
-  const newImages = await doOnlineSearch(fandomName, fandomNameEn, characterNames);
-  if (newImages.length === 0) return [];
-
-  // 3. 下载并缓存
-  const downloaded: ReferenceImage[] = [];
-  for (const img of newImages.slice(0, MAX_IMAGES_PER_IP)) {
-    try {
-      const local = await downloadAndCache(img, fandomName);
-      if (local) downloaded.push(local);
-    } catch {
-      // 单张失败不阻塞
-    }
-  }
-
-  // 4. 更新索引
-  cached[key] = {
-    fandomName,
-    fandomNameEn,
-    images: downloaded,
-    searchedAt: new Date().toISOString(),
-  };
-  await saveCacheIndex(cached);
-
-  return filterByCharacters(downloaded, characterNames);
-}
-
-/**
- * 获取指定 IP 的全部已缓存参考图（不触发在线搜索）
- */
-export async function getCachedReferenceImages(
-  fandomName: string,
-): Promise<ReferenceImage[]> {
-  if (!isEnabled()) return [];
-  const cached = await loadCacheIndex();
-  const entry = cached[fandomName];
-  if (!entry) return [];
-  if (isExpired(entry.searchedAt)) return [];
-  return entry.images;
-}
-
-// ─── 搜索策略（分层） ─────────────────────────────────────────────
-
-async function doOnlineSearch(
-  fandomName: string,
-  fandomNameEn: string,
-  characterNames: string[],
-): Promise<Array<{ url: string; characterName?: string }>> {
-  const results: Array<{ url: string; characterName?: string }> = [];
-
-  // 层1: Serper.dev 图片搜索（如果已配置）
-  if (hasExplicitWebSearch()) {
-    const serperResults = await searchViaSerper(fandomName, fandomNameEn, characterNames);
-    results.push(...serperResults);
-  }
-
-  // 层2: Fandom Wiki MediaWiki API
-  if (results.length < 10) {
-    const wikiResults = await searchViaFandomWiki(fandomNameEn);
-    results.push(...wikiResults);
-  }
-
-  return results;
-}
-
-/**
- * 层1: 通过 Serper.dev 搜索角色参考图
- */
-async function searchViaSerper(
-  fandomName: string,
-  fandomNameEn: string,
-  characterNames: string[],
-): Promise<Array<{ url: string; characterName?: string }>> {
-  const results: Array<{ url: string; characterName?: string }> = [];
-
-  // 按角色名分别搜索，每个角色最多 2 张
-  for (const charName of characterNames.slice(0, 8)) {
-    const query = `${fandomNameEn} ${charName} official art character design`;
-    try {
-      const searchResults = await webSearch(query, {
-        maxResults: 3,
-      });
-      for (const r of searchResults) {
-        if (/\.(jpg|jpeg|png|webp|gif)(\?.*)?$/i.test(r.url)) {
-          results.push({ url: r.url, characterName: charName });
-        }
-      }
-    } catch {
-      // 单角色搜索失败跳过
-    }
-  }
-
-  // 搜一张作品总体角色图
-  if (results.length < 3) {
-    try {
-      const generalResults = await webSearch(
-        `${fandomNameEn} main characters official artwork`,
-        { maxResults: 3 },
-      );
-      for (const r of generalResults) {
-        if (/\.(jpg|jpeg|png|webp|gif)(\?.*)?$/i.test(r.url)) {
-          results.push({ url: r.url });
-        }
-      }
-    } catch {}
-  }
-
-  return results;
-}
-
-/**
- * 层2: 通过 Fandom Wiki MediaWiki API 获取角色图片
- */
-async function searchViaFandomWiki(
-  fandomNameEn: string,
-): Promise<Array<{ url: string; characterName?: string }>> {
-  const wikiId = fandomNameToWikiId(fandomNameEn);
-  if (!wikiId) return [];
-
-  const results: Array<{ url: string; characterName?: string }> = [];
-  const baseUrl = `https://${wikiId}.fandom.com`;
-
-  try {
-    // 获取主要角色分类下的页面列表
-    const listUrl = `${baseUrl}/api.php?action=query&list=categorymembers&cmtitle=Category:Characters&cmlimit=20&format=json`;
-    const resp = await fetch(listUrl, {
-      headers: { 'User-Agent': 'GushiStoryBot/1.0 (fanfiction reference image search)' },
-      signal: AbortSignal.timeout(8000),
-    });
-    if (!resp.ok) return [];
-    const data = await resp.json();
-    const pages = data?.query?.categorymembers || [];
-
-    // 批量获取页面缩略图
-    const pageIds = pages.map((p: any) => p.title).slice(0, 15);
-    if (pageIds.length === 0) return [];
-
-    const titles = pageIds.map(encodeURIComponent).join('|');
-    const imgUrl = `${baseUrl}/api.php?action=query&titles=${titles}&prop=pageimages&format=json&pithumbsize=500`;
-    const imgResp = await fetch(imgUrl, {
-      headers: { 'User-Agent': 'GushiStoryBot/1.0' },
-      signal: AbortSignal.timeout(8000),
-    });
-    if (!imgResp.ok) return [];
-
-    const imgData = await imgResp.json();
-    const pagesMap = imgData?.query?.pages || {};
-
-    for (const [, page] of Object.entries(pagesMap as Record<string, any>)) {
-      if (page.thumbnail?.source) {
-        const charName = (page.title || '').replace(/_/g, ' ');
-        results.push({ url: page.thumbnail.source, characterName: charName });
-      }
-    }
-  } catch {
-    // Fandom Wiki 抓取失败，静默降级
-  }
-
-  return results;
-}
-
-// ─── 下载与缓存 ────────────────────────────────────────────────────
-
-async function downloadAndCache(
-  img: { url: string; characterName?: string },
-  fandomName: string,
-): Promise<ReferenceImage | null> {
-  try {
-    const resp = await fetch(img.url, {
-      headers: { 'User-Agent': 'GushiStoryBot/1.0' },
-      signal: AbortSignal.timeout(15000),
-    });
-    if (!resp.ok) return null;
-
-    const contentType = resp.headers.get('content-type') || '';
-    if (!contentType.startsWith('image/')) return null;
-
-    const buffer = Buffer.from(await resp.arrayBuffer());
-    if (buffer.length > MAX_IMAGE_SIZE) return null;
-
-    const ext = contentType.includes('webp') ? 'webp'
-      : contentType.includes('png') ? 'png'
-      : contentType.includes('gif') ? 'gif' : 'jpg';
-
-    const fandomDir = fandomName.replace(/[^\w\u4e00-\u9fff]/g, '_');
-    const urlHash = createHash('md5').update(img.url).digest('hex').slice(0, 8);
-    const charPart = img.characterName
-      ? img.characterName.replace(/[^\w]/g, '_').slice(0, 30)
-      : 'group';
-    const filename = `${charPart}_${urlHash}.${ext}`;
-
-    const dir = join(REF_DIR, fandomDir);
-    if (!existsSync(dir)) await mkdir(dir, { recursive: true });
-
-    const filepath = join(dir, filename);
-    await writeFile(filepath, buffer);
-
-    return {
-      localPath: `/reference-images/${fandomDir}/${filename}`,
-      sourceUrl: img.url,
-      characterName: img.characterName,
-      fandomName,
-      cachedAt: new Date().toISOString(),
-      size: buffer.length,
-    };
-  } catch {
-    return null;
-  }
-}
-
-// ─── 缓存索引管理 ──────────────────────────────────────────────────
-
-async function loadCacheIndex(): Promise<Record<string, FandomImageCache>> {
-  try {
-    const data = await readFile(CACHE_INDEX_FILE, 'utf-8');
-    return JSON.parse(data);
-  } catch {
-    return {};
-  }
-}
-
-async function saveCacheIndex(data: Record<string, FandomImageCache>): Promise<void> {
-  const dir = join(CACHE_INDEX_FILE, '..');
-  if (!existsSync(dir)) await mkdir(dir, { recursive: true });
-  await writeFile(CACHE_INDEX_FILE, JSON.stringify(data, null, 2), 'utf-8');
-}
-
-function isExpired(isoDate: string): boolean {
-  const age = Date.now() - new Date(isoDate).getTime();
-  return age > CACHE_TTL_DAYS * 24 * 60 * 60 * 1000;
-}
-
-function filterByCharacters(
-  images: ReferenceImage[],
-  characterNames: string[],
-): ReferenceImage[] {
-  if (characterNames.length === 0) return images;
-  const nameSet = new Set(characterNames.map(n => n.toLowerCase()));
-  return images.filter(img =>
-    !img.characterName || nameSet.has(img.characterName.toLowerCase()),
-  );
-}
-
-// ─── 辅助函数 ──────────────────────────────────────────────────────
-
-/** 常见同人 IP 英文名 -> Fandom Wiki 子域名映射 */
 const WIKI_ID_MAP: Record<string, string> = {
   'naruto': 'naruto',
   'one piece': 'onepiece',
@@ -334,18 +48,256 @@ const WIKI_ID_MAP: Record<string, string> = {
   'dc': 'dc',
   'genshin impact': 'genshin-impact',
   'demon slayer': 'kimetsu-no-yaiba',
-  'jujutsu kaisen': 'jujutsu-kaisen',
   'attack on titan': 'attackontitan',
-  'my hero academia': 'myheroacademia',
+  'my hero academia': 'bokunoheroacademia',
+  'sailor moon': 'sailormoon',
+  'one punch man': 'onepunchman',
+  'jujutsu kaisen': 'jujutsu-kaisen',
   'spy x family': 'spy-x-family',
   'chainsaw man': 'chainsaw-man',
-  'fullmetal alchemist': 'fma',
-  'sword art online': 'swordartonline',
-  'three-body': 'three-body-problem',
-  'the three-body problem': 'three-body-problem',
+  'frieren': 'frieren',
 };
 
-function fandomNameToWikiId(fandomNameEn: string): string | null {
-  const key = (fandomNameEn || '').toLowerCase().trim();
-  return WIKI_ID_MAP[key] || null;
+// ─── 本地缓存读写 ───────────────────────────────────────────────────
+
+interface CacheEntry {
+  fandomName: string;
+  images: ReferenceImageHint[];
+  fetchedAt: number;
+}
+
+async function readCache(): Promise<CacheEntry[]> {
+  try {
+    if (!existsSync(REF_META_FILE)) return [];
+    const raw = await readFile(REF_META_FILE, 'utf-8');
+    return JSON.parse(raw) as CacheEntry[];
+  } catch {
+    return [];
+  }
+}
+
+async function writeCache(entries: CacheEntry[]): Promise<void> {
+  const dir = join(process.cwd(), 'data');
+  if (!existsSync(dir)) await mkdir(dir, { recursive: true });
+  await writeFile(REF_META_FILE, JSON.stringify(entries, null, 2));
+}
+
+async function ensureCacheDir(): Promise<void> {
+  if (!existsSync(REF_CACHE_DIR)) {
+    await mkdir(REF_CACHE_DIR, { recursive: true });
+  }
+}
+
+// ─── IP 检测 ──────────────────────────────────────────────────────
+
+/**
+ * 从 genre/description 检测同人 IP 名称
+ */
+export function detectFandomIP(genre: string, description: string): string | null {
+  if (!genre?.includes('同人') && !description?.includes('同人')) return null;
+
+  // 尝试从 description 中提取 IP 名
+  const ipPatterns = [
+    /《(.{2,30})》/,
+    /「(.{2,30})」/,
+    /【(.{2,30})】/,
+    /(?:同人|二创|同人创作)[：:]\s*(.{2,30}?)(?:\s|,|，|。|$)/,
+  ];
+
+  for (const pat of ipPatterns) {
+    const m = description.match(pat);
+    if (m && m[1]) return m[1].trim();
+  }
+
+  return null;
+}
+
+// ─── 搜索策略 1: Serper.dev 图片搜索 ────────────────────────────────
+
+async function searchSerper(query: string): Promise<Array<{ title: string; imageUrl: string }>> {
+  if (!SERPER_API_KEY) return [];
+
+  try {
+    const resp = await fetch(SERPER_ENDPOINT, {
+      method: 'POST',
+      headers: {
+        'X-API-KEY': SERPER_API_KEY,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        q: query,
+        num: 10,
+        gl: 'us',
+        hl: 'en',
+      }),
+    });
+
+    if (!resp.ok) return [];
+    const data = await resp.json();
+    const images = data.images || data.organic || [];
+    return images
+      .filter((img: any) => img.imageUrl || img.link)
+      .slice(0, MAX_IMAGES_PER_IP)
+      .map((img: any) => ({
+        title: img.title || '',
+        imageUrl: img.imageUrl || img.link || '',
+      }));
+  } catch (e) {
+    console.warn('[reference-image-search] Serper search failed:', e);
+    return [];
+  }
+}
+
+// ─── 搜索策略 2: Fandom Wiki MediaWiki API ──────────────────────────
+
+async function searchFandomWiki(
+  fandomNameEn: string,
+  characters?: string[],
+): Promise<Array<{ title: string; imageUrl: string }>> {
+  const wikiSubdomain = WIKI_ID_MAP[fandomNameEn.toLowerCase()];
+  if (!wikiSubdomain) return [];
+
+  const baseUrl = `https://${wikiSubdomain}.fandom.com`;
+  const results: Array<{ title: string; imageUrl: string }> = [];
+
+  try {
+    // Search for character pages
+    const searchTerms = characters?.slice(0, 5) || [];
+    if (searchTerms.length === 0) return [];
+
+    for (const term of searchTerms) {
+      // Step 1: Search for the page
+      const searchUrl = `${baseUrl}/api.php?action=query&list=search&srsearch=${encodeURIComponent(term)}&format=json&origin=*`;
+      const searchResp = await fetch(searchUrl, { signal: AbortSignal.timeout(8000) });
+      if (!searchResp.ok) continue;
+      const searchData = await searchResp.json();
+      const pageId = searchData.query?.search?.[0]?.pageid;
+      if (!pageId) continue;
+
+      // Step 2: Get the page image
+      const imgUrl = `${baseUrl}/api.php?action=query&pageids=${pageId}&prop=pageimages&piprop=original&format=json&origin=*`;
+      const imgResp = await fetch(imgUrl, { signal: AbortSignal.timeout(8000) });
+      if (!imgResp.ok) continue;
+      const imgData = await imgResp.json();
+      const source = imgData.query?.pages?.[pageId]?.original?.source;
+      if (source) {
+        results.push({ title: term, imageUrl: source });
+      }
+    }
+  } catch (e) {
+    console.warn('[reference-image-search] Fandom Wiki search failed:', e);
+  }
+
+  return results.slice(0, MAX_IMAGES_PER_IP);
+}
+
+// ─── 下载 & 缓存图片 ────────────────────────────────────────────────
+
+async function downloadAndCache(
+  imageUrl: string,
+  fandomName: string,
+  index: number,
+): Promise<string | null> {
+  try {
+    const resp = await fetch(imageUrl, {
+      signal: AbortSignal.timeout(15000),
+      headers: { 'User-Agent': 'GushiStoryPlatform/1.0' },
+    });
+    if (!resp.ok) return null;
+
+    const contentType = resp.headers.get('content-type') || '';
+    if (!contentType.startsWith('image/')) return null;
+
+    const buffer = Buffer.from(await resp.arrayBuffer());
+    if (buffer.length > MAX_IMAGE_SIZE) return null;
+
+    const ext = contentType.split('/')[1]?.replace('jpeg', 'jpg') || 'jpg';
+    const safeName = fandomName.replace(/[^a-zA-Z0-9\u4e00-\u9fff]/g, '_').slice(0, 30);
+    const filename = `ref_${safeName}_${index}_${Date.now()}.${ext}`;
+
+    await ensureCacheDir();
+    await writeFile(join(REF_CACHE_DIR, filename), buffer);
+    return `/reference-images/${filename}`;
+  } catch (e) {
+    console.warn('[reference-image-search] Download failed:', e);
+    return null;
+  }
+}
+
+// ─── 主入口 ────────────────────────────────────────────────────────
+
+
+/**
+ * 获取缓存的参考图（不触发搜索）
+ * 直接通过 fandomName 查找（由 images/generate/route.ts 传入 worldVariables.fandom_name）
+ */
+export async function getCachedReferenceImages(fandomName: string): Promise<ReferenceImageHint[]> {
+  if (!ENABLED || !fandomName) return [];
+  const cache = await readCache();
+  const cached = cache.find(c => c.fandomName === fandomName && Date.now() - c.fetchedAt < CACHE_TTL_MS);
+  return cached?.images || [];
+}
+
+/**
+ * 搜索同人 IP 参考图（直接传入 fandom 信息，由 images/generate/route.ts 调用）
+ */
+export async function searchReferenceImages(
+  fandomName: string,
+  fandomNameEn: string,
+  characters: string[] = [],
+): Promise<ReferenceImageHint[]> {
+  if (!ENABLED || !fandomName) return [];
+
+  // Check local cache first
+  const cache = await readCache();
+  const cached = cache.find(c => c.fandomName === fandomName && Date.now() - c.fetchedAt < CACHE_TTL_MS);
+  if (cached) return cached.images;
+
+  const results: ReferenceImageHint[] = [];
+  let downloadedIndex = 0;
+
+  // Strategy 1: Serper.dev image search
+  const serperQuery = `${fandomName} official artwork character design`;
+  const serperResults = await searchSerper(serperQuery);
+  for (const img of serperResults.slice(0, 6)) {
+    const localPath = await downloadAndCache(img.imageUrl, fandomName, downloadedIndex);
+    if (localPath) {
+      results.push({
+        characterName: undefined,
+        localPath,
+        sourceUrl: img.imageUrl,
+        fandomName,
+      });
+      downloadedIndex++;
+    }
+  }
+
+  // Strategy 2: Fandom Wiki
+  if (fandomNameEn || WIKI_ID_MAP[fandomName.toLowerCase()]) {
+    const wikiName = fandomNameEn || WIKI_ID_MAP[fandomName.toLowerCase()] || '';
+    const wikiResults = await searchFandomWiki(wikiName, characters);
+    for (const img of wikiResults) {
+      const localPath = await downloadAndCache(img.imageUrl, fandomName, downloadedIndex);
+      if (localPath) {
+        results.push({
+          characterName: img.title,
+          localPath,
+          sourceUrl: img.imageUrl,
+          fandomName,
+        });
+        downloadedIndex++;
+      }
+    }
+  }
+
+  // Update cache
+  if (results.length > 0) {
+    const newEntry: CacheEntry = { fandomName, images: results, fetchedAt: Date.now() };
+    const updatedCache = cache.filter(c => c.fandomName !== fandomName);
+    updatedCache.push(newEntry);
+    await writeCache(updatedCache);
+  }
+
+  console.log(`[reference-image-search] Found ${results.length} reference images for "${fandomName}"`);
+  return results;
 }

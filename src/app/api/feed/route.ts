@@ -9,10 +9,12 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(searchParams.get('limit') || '20', 10);
     const genre = searchParams.get('genre');
     const era = searchParams.get('era');
+    const storyType = searchParams.get('storyType');
 
     const where: any = { visibility: 'PUBLIC' };
     if (genre) where.genre = genre;
     if (era) where.era = era;
+    if (storyType) where.storyType = storyType;
 
     const [stories, total] = await Promise.all([
       prisma.story.findMany({

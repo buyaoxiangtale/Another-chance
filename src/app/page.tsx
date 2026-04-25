@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useSession } from 'next-auth/react';
 import LikeButton from '@/components/social/LikeButton';
+import { STORY_CATEGORY_TABS } from '@/lib/genre-config';
 
 interface Story {
   id: string;
@@ -22,16 +23,19 @@ interface Story {
   };
   era?: string;
   genre?: string;
+  storyType?: string;
   characterCount?: number;
   visibility?: string;
   ownerId?: string;
   isLiked?: boolean;
+  coverImageUrl?: string;
   _count?: { segments: number; likes: number; comments: number; branches: number };
 }
 
 function StoryCard({ story, index, onDelete, currentUserId }: { story: Story; index: number; onDelete: (id: string) => void; currentUserId?: string }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [imgError, setImgError] = useState(false);
   const isOwner = currentUserId && story.ownerId === currentUserId;
 
   const handleDelete = async (e: React.MouseEvent) => {
@@ -66,21 +70,41 @@ function StoryCard({ story, index, onDelete, currentUserId }: { story: Story; in
     gradient: 'from-gray-700 to-gray-900'
   };
 
+  const hasCover = story.coverImageUrl && !imgError;
+
   return (
     <Link href={`/story/${story.id}`} className="block animate-fade-in-up" style={{ animationDelay: `${index * 100}ms` }}>
       <div className="story-card rounded-xl overflow-hidden">
-        <div className={`h-2 bg-gradient-to-r ${meta.gradient}`} />
-        <div className="p-6">
-          <div className="flex items-center justify-between mb-4">
-            <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-50 text-amber-800 text-sm font-medium rounded-full border border-amber-200">
-              <span>{meta.icon}</span>
-              {meta.era}
-            </span>
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-[var(--muted)]">
-                {new Date(story.createdAt).toLocaleDateString('zh-CN')}
-              </span>
-              <div className="relative">
+        <div className="flex">
+          {/* 左侧封面图 - 番茄小说风格 */}
+          <div className="relative w-28 shrink-0">
+            {hasCover ? (
+              <img
+                src={story.coverImageUrl}
+                alt={story.title}
+                className="w-full h-full object-cover"
+                style={{ minHeight: '180px' }}
+                onError={() => setImgError(true)}
+              />
+            ) : (
+              <div className={`w-full h-full bg-gradient-to-br ${meta.gradient} flex flex-col items-center justify-center p-2`} style={{ minHeight: '180px' }}>
+                <span className="text-3xl mb-2">{meta.icon}</span>
+                <span className="text-white text-xs font-bold text-center leading-tight px-1 line-clamp-3">{story.title}</span>
+                <span className="text-white/60 text-[10px] mt-1">{meta.era}</span>
+              </div>
+            )}
+            {/* 封面底部遮罩渐变 */}
+            {hasCover && (
+              <div className="absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-black/40 to-transparent" />
+            )}
+          </div>
+
+          {/* 右侧故事信息 */}
+          <div className="flex-1 p-4 min-w-0 flex flex-col">
+            {/* 顶部：标题 + 菜单 */}
+            <div className="flex items-start justify-between gap-2 mb-2">
+              <h3 className="text-lg font-bold text-[var(--ink)] tracking-wide leading-tight line-clamp-2">{story.title}</h3>
+              <div className="relative shrink-0">
                 <button
                   onClick={(e) => { e.preventDefault(); e.stopPropagation(); setMenuOpen(!menuOpen); }}
                   className="p-1 text-[var(--muted)] hover:text-[var(--ink)] rounded transition-colors"
@@ -113,90 +137,57 @@ function StoryCard({ story, index, onDelete, currentUserId }: { story: Story; in
                 )}
               </div>
             </div>
-          </div>
 
-          <h3 className="text-xl font-bold text-[var(--ink)] mb-2 tracking-wide">{story.title}</h3>
-
-          {story.description && (
-            <p className="text-sm text-[var(--muted)] leading-relaxed mb-4 line-clamp-2">{story.description}</p>
-          )}
-
-          <div className="flex items-center gap-4 mb-4 text-sm">
-            <div className="flex items-center gap-1 text-[var(--muted)]">
-              <span>📝</span><span>{story.totalSegments || 0} 段落</span>
-            </div>
-            {/* C6.8: Show character count */}
-            {story.characterCount !== undefined && story.characterCount > 0 && (
-              <div className="flex items-center gap-1 text-amber-600">
-                <span>🎭</span><span>{story.characterCount} 角色</span>
-              </div>
+            {/* 描述 */}
+            {story.description && (
+              <p className="text-xs text-[var(--muted)] leading-relaxed mb-2 line-clamp-2">{story.description}</p>
             )}
-            {story.totalBranches && story.totalBranches > 0 && (
-              <div className="flex items-center gap-1 text-[var(--accent)]">
-                <span>🌿</span><span>{story.totalBranches} 分支</span>
-              </div>
-            )}
-          </div>
 
-          {/* Era, genre, and visibility tags */}
-          {(story.era || story.genre || story.visibility) && (
-            <div className="flex items-center gap-2 mb-4">
-              {story.era && (
-                <span className="text-[10px] px-2 py-0.5 bg-blue-50 text-blue-600 rounded-full border border-blue-200">
-                  {story.era}
-                </span>
-              )}
+            {/* 标签 */}
+            <div className="flex items-center gap-1.5 mb-2 flex-wrap">
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-50 text-amber-700 text-[10px] font-medium rounded-full border border-amber-200">
+                <span>{meta.icon}</span>{meta.era}
+              </span>
               {story.genre && (
                 <span className="text-[10px] px-2 py-0.5 bg-purple-50 text-purple-600 rounded-full border border-purple-200">
                   {story.genre}
                 </span>
               )}
               {story.visibility === 'PRIVATE' && (
-                <span className="text-[10px] px-2 py-0.5 bg-gray-100 text-gray-500 rounded-full border border-gray-200">
-                  🔒 私有
-                </span>
+                <span className="text-[10px] px-2 py-0.5 bg-gray-100 text-gray-500 rounded-full border border-gray-200">🔒 私有</span>
               )}
               {story.visibility === 'UNLISTED' && (
-                <span className="text-[10px] px-2 py-0.5 bg-yellow-50 text-yellow-600 rounded-full border border-yellow-200">
-                  🔗 隐链
-                </span>
-              )}
-              {story.visibility === 'PUBLIC' && (
-                <span className="text-[10px] px-2 py-0.5 bg-green-50 text-green-600 rounded-full border border-green-200">
-                  🌐 公开
-                </span>
+                <span className="text-[10px] px-2 py-0.5 bg-yellow-50 text-yellow-600 rounded-full border border-yellow-200">🔗 隐链</span>
               )}
             </div>
-          )}
 
-          {story.latestBranch && (
-            <div className="mb-4 p-3 bg-red-50/30 border border-red-200/50 rounded-lg">
-              <div className="flex items-center gap-2 mb-1">
-                <span className="text-xs text-[var(--accent)]">最新分支</span>
-                <span className="text-xs text-[var(--muted)]">
-                  {new Date(story.latestBranch.createdAt).toLocaleDateString('zh-CN')}
-                </span>
+            {/* 统计数据 */}
+            <div className="flex items-center gap-3 text-[11px] text-[var(--muted)] mb-auto">
+              <span className="flex items-center gap-0.5">📝 {story.totalSegments || 0} 段</span>
+              {story.characterCount !== undefined && story.characterCount > 0 && (
+                <span className="flex items-center gap-0.5 text-amber-600">🎭 {story.characterCount} 角色</span>
+              )}
+              {story.totalBranches && story.totalBranches > 0 && (
+                <span className="flex items-center gap-0.5 text-[var(--accent)]">🌿 {story.totalBranches} 分支</span>
+              )}
+            </div>
+
+            {/* 底部操作栏 */}
+            <div className="flex items-center justify-between pt-2 mt-2 border-t border-[var(--border)]">
+              <div className="flex items-center gap-2">
+                <LikeButton
+                  targetId={story.id}
+                  type="story"
+                  size="sm"
+                  initialLiked={story.isLiked || false}
+                  initialCount={story._count?.likes || 0}
+                />
+                {story._count?.comments && story._count.comments > 0 && (
+                  <span className="text-[10px] text-[var(--muted)]">💬 {story._count.comments}</span>
+                )}
               </div>
-              <p className="text-xs text-[var(--accent)] font-medium line-clamp-1">
-                {story.latestBranch.userDirection || story.latestBranch.title}
-              </p>
+              <span className="text-xs text-[var(--gold)] font-medium">开始阅读 →</span>
             </div>
-          )}
-
-          <div className="flex items-center justify-between pt-3 border-t border-[var(--border)]">
-            <div className="flex items-center gap-3">
-              <LikeButton
-                targetId={story.id}
-                type="story"
-                size="sm"
-                initialLiked={story.isLiked || false}
-                initialCount={story._count?.likes || 0}
-              />
-              {story._count?.comments && story._count.comments > 0 && (
-                <span className="text-xs text-[var(--muted)]">💬 {story._count.comments}</span>
-              )}
-            </div>
-            <span className="text-sm text-[var(--gold)] font-medium flex items-center gap-1">开始阅读 →</span>
           </div>
         </div>
       </div>
@@ -209,12 +200,17 @@ function LoadingSkeleton() {
     <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
       {[1, 2, 3].map((i) => (
         <div key={i} className="animate-pulse rounded-xl border border-[var(--border)] overflow-hidden">
-          <div className="h-2 bg-gray-200" />
-          <div className="p-6 space-y-4">
-            <div className="h-6 bg-gray-200 rounded w-16" />
-            <div className="h-6 bg-gray-200 rounded w-3/4" />
-            <div className="h-4 bg-gray-200 rounded w-full" />
-            <div className="h-4 bg-gray-200 rounded w-2/3" />
+          <div className="flex">
+            <div className="w-28 bg-gray-200 shrink-0" style={{ minHeight: '180px' }} />
+            <div className="flex-1 p-4 space-y-3">
+              <div className="h-5 bg-gray-200 rounded w-3/4" />
+              <div className="h-3 bg-gray-200 rounded w-full" />
+              <div className="h-3 bg-gray-200 rounded w-2/3" />
+              <div className="flex gap-2">
+                <div className="h-4 bg-gray-200 rounded w-12" />
+                <div className="h-4 bg-gray-200 rounded w-10" />
+              </div>
+            </div>
           </div>
         </div>
       ))}
@@ -228,6 +224,7 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<'all' | 'mine'>('all');
+  const [categoryFilter, setCategoryFilter] = useState<string>('all');
 
   const handleDeleteStory = (storyId: string) => {
     setStories(prev => prev.filter(s => s.id !== storyId));
@@ -310,7 +307,7 @@ export default function Home() {
       </div>
 
       <div className="max-w-5xl mx-auto px-6 pb-20">
-        <div className="flex items-center gap-4 mb-8">
+        <div className="flex items-center gap-4 mb-4">
           <h2 className="text-2xl font-bold text-[var(--ink)] tracking-wide">故事长卷</h2>
           <div className="flex-1 h-px bg-gradient-to-r from-[var(--border)] to-transparent" />
           {session?.user && (
@@ -331,6 +328,22 @@ export default function Home() {
           )}
         </div>
 
+        <div className="flex gap-2 mb-8 overflow-x-auto pb-1">
+          {STORY_CATEGORY_TABS.map(cat => (
+            <button
+              key={cat.key}
+              onClick={() => setCategoryFilter(cat.key)}
+              className={`px-4 py-1.5 text-sm rounded-full whitespace-nowrap transition-colors border ${
+                categoryFilter === cat.key
+                  ? 'bg-amber-700 text-white border-amber-700'
+                  : 'bg-white text-[var(--muted)] border-[var(--border)] hover:border-amber-400 hover:text-amber-700'
+              }`}
+            >
+              {cat.label}
+            </button>
+          ))}
+        </div>
+
         {loading && <LoadingSkeleton />}
 
         {error && (
@@ -349,9 +362,15 @@ export default function Home() {
         )}
 
         {!loading && !error && (() => {
-          const filtered = tab === 'mine' && session?.user?.id
-            ? stories.filter(s => s.ownerId === session.user.id)
-            : stories;
+          let filtered = stories;
+          // Filter by ownership
+          if (tab === 'mine' && session?.user?.id) {
+            filtered = filtered.filter(s => s.ownerId === session.user.id);
+          }
+          // Filter by category (storyType)
+          if (categoryFilter !== 'all') {
+            filtered = filtered.filter(s => s.storyType === categoryFilter);
+          }
           return filtered.length > 0 ? (
             <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
               {filtered.map((story, i) => (

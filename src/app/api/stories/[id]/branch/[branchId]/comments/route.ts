@@ -13,82 +13,54 @@ export async function GET(
     const page = parseInt(searchParams.get('page') || '1', 10);
     const limit = parseInt(searchParams.get('limit') || '20', 10);
 
-    const comments = await prisma.comment.findMany({
-      where: { branchId, parentId: null },
+    // Fetch all comments flat, then build tree for unlimited depth
+    const allComments = await prisma.comment.findMany({
+      where: { branchId },
       include: {
         user: { select: { id: true, name: true, image: true } },
-        replies: {
-          include: {
-            user: { select: { id: true, name: true, image: true } },
-            replies: {
-              include: {
-                user: { select: { id: true, name: true, image: true } },
-              },
-            },
-          },
-        },
+        _count: { select: { likes: true } },
       },
       orderBy: { createdAt: 'desc' },
-      skip: (page - 1) * limit,
-      take: limit,
     });
 
-    // 手动统计 likes 数量
-    const allCommentIds = new Set<string>();
-    comments.forEach(c => {
-      allCommentIds.add(c.id);
-      c.replies?.forEach(r => {
-        allCommentIds.add(r.id);
-        r.replies?.forEach(rr => allCommentIds.add(rr.id));
-      });
-    });
-
-    const likeCounts = allCommentIds.size > 0
-      ? await prisma.commentLike.groupBy({
-          by: ['commentId'],
-          where: { commentId: { in: Array.from(allCommentIds) } },
-          _count: { commentId: true },
-        }).then(rows => {
-            const map: Record<string, number> = {};
-            rows.forEach(r => { map[r.commentId] = r._count.commentId; });
-            return map;
-          })
-      : {};
-
-    // 递归添加 _count
-    function addLikeCount(comment: any) {
-      comment._count = { likes: likeCounts[comment.id] || 0 };
-      comment.replies?.forEach(addLikeCount);
-      return comment;
+    // Build tree from flat list
+    const commentMap = new Map<string, any>();
+    const roots: any[] = [];
+    for (const c of allComments) {
+      commentMap.set(c.id, { ...c, replies: [] });
     }
-    comments.forEach(addLikeCount);
+    for (const c of allComments) {
+      const node = commentMap.get(c.id)!;
+      if (c.parentId && commentMap.has(c.parentId)) {
+        commentMap.get(c.parentId)!.replies.push(node);
+      } else {
+        roots.push(node);
+      }
+    }
 
-    // Get current user's likes on these comments
+    // Paginate top-level comments
+    const total = roots.length;
+    const paginatedRoots = roots.slice((page - 1) * limit, page * limit);
+
+    // Get current user's likes
     const userId = await getUserIdFromRequest(request);
     let likedCommentIds = new Set<string>();
-    if (userId && allCommentIds.size > 0) {
-      const likes = await prisma.commentLike.findMany({
-        where: { userId, commentId: { in: Array.from(allCommentIds) } },
-        select: { commentId: true },
-      });
-      likedCommentIds = new Set(likes.map(l => l.commentId));
+    if (userId) {
+      const ids = collectCommentIds(paginatedRoots);
+      if (ids.length > 0) {
+        const likes = await prisma.commentLike.findMany({
+          where: { userId, commentId: { in: ids } },
+          select: { commentId: true },
+        });
+        likedCommentIds = new Set(likes.map(l => l.commentId));
+      }
     }
 
-    // Mark liked status
-    function markLiked(comment: any) {
-      comment.liked = likedCommentIds.has(comment.id);
-      comment.replies?.forEach(markLiked);
-      return comment;
-    }
-    if (userId) comments.forEach(markLiked);
-
-    const total = await prisma.comment.count({
-      where: { branchId, parentId: null },
-    });
+    const commentsWithLiked = userId ? markLiked(paginatedRoots, likedCommentIds) : paginatedRoots;
 
     return NextResponse.json({
       success: true,
-      comments,
+      comments: commentsWithLiked,
       pagination: { page, limit, total, pages: Math.ceil(total / limit) },
     });
   } catch (error) {
@@ -119,19 +91,10 @@ export async function POST(
     if (parentId) {
       const parent = await prisma.comment.findUnique({
         where: { id: parentId },
-        select: { parentId: true, branchId: true },
+        select: { branchId: true },
       });
       if (!parent || parent.branchId !== branchId) {
         return NextResponse.json({ error: '回复目标不存在' }, { status: 404 });
-      }
-      if (parent.parentId) {
-        const gp = await prisma.comment.findUnique({
-          where: { id: parent.parentId },
-          select: { parentId: true },
-        });
-        if (gp?.parentId) {
-          return NextResponse.json({ error: '回复层级最多3层' }, { status: 400 });
-        }
       }
     }
 
@@ -152,4 +115,23 @@ export async function POST(
     console.error('分支评论失败:', error);
     return NextResponse.json({ error: '评论失败' }, { status: 500 });
   }
+}
+
+// Helper: collect all comment IDs from nested structure
+function collectCommentIds(comments: any[]): string[] {
+  const ids: string[] = [];
+  for (const c of comments) {
+    ids.push(c.id);
+    if (c.replies?.length) ids.push(...collectCommentIds(c.replies));
+  }
+  return ids;
+}
+
+// Helper: mark liked status on nested comments
+function markLiked(comments: any[], likedIds: Set<string>): any[] {
+  return comments.map(c => ({
+    ...c,
+    liked: likedIds.has(c.id),
+    replies: c.replies?.length ? markLiked(c.replies, likedIds) : c.replies,
+  }));
 }

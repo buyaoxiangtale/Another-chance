@@ -68,12 +68,11 @@ export default function CommentItem({ comment, storyId, branchId, depth = 0, onL
     setShowReplyForm(false);
   };
 
-  const ml = depth * 24;
-  const maxDepth = 3;
   const isOwner = session?.user?.id === comment.user.id;
+  const isAdmin = session?.user?.isAdmin === true;
 
   return (
-    <div style={{ marginLeft: depth > 0 ? ml : 0 }} className="group">
+    <div className="group">
       <div className="flex gap-3 py-3">
         {/* Avatar */}
         <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gradient-to-br from-amber-200 to-red-300 flex items-center justify-center text-xs font-bold text-white">
@@ -92,7 +91,7 @@ export default function CommentItem({ comment, storyId, branchId, depth = 0, onL
                 minute: '2-digit',
               })}
             </span>
-            {isOwner && (
+            {(isOwner || isAdmin) && (
               <button
                 onClick={handleDelete}
                 className="text-xs text-[var(--muted)] hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
@@ -118,7 +117,7 @@ export default function CommentItem({ comment, storyId, branchId, depth = 0, onL
             >
               {liked ? '❤️' : '🤍'} {likeCount}
             </button>
-            {depth < maxDepth && session && (
+            {session && (
               <button
                 onClick={() => setShowReplyForm(!showReplyForm)}
                 className="text-xs text-[var(--muted)] hover:text-[var(--gold)] transition-colors"
@@ -143,7 +142,7 @@ export default function CommentItem({ comment, storyId, branchId, depth = 0, onL
 
           {/* Nested Replies */}
           {comment.replies && comment.replies.length > 0 && (
-            <div className="mt-1 border-l-2 border-amber-100 pl-0">
+            <div className="mt-1">
               {comment.replies.map((reply) => (
                 <CommentItem
                   key={reply.id}

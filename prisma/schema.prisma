@@ -91,6 +91,9 @@ model Story {
   rootSegmentId String?  @unique
   era           String?
   genre         String?
+  storyType     String?
+
+  coverImageUrl String?
 
   ownerId       String
   owner         User       @relation(fields: [ownerId], references: [id], onDelete: Cascade)

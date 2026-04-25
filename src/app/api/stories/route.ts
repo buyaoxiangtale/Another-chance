@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { getUserIdFromRequest } from '@/lib/auth-helpers';
 import { canViewStory } from '@/lib/permissions';
-import { STORY_TYPE_TO_GENRE } from '@/lib/genre-config';
+
 import { characterManager } from '@/lib/character-engine';
+import { generateCoverImage } from '@/lib/cover-generator';
 
 export async function GET(request: NextRequest) {
   try {
@@ -74,7 +75,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: '故事标题是必填项' }, { status: 400 });
     }
 
-    const effectiveGenre = genre || (storyType ? STORY_TYPE_TO_GENRE[storyType] : undefined);
+    const effectiveGenre = genre || undefined; // genre only stores sub-genre label
 
     const existing = await prisma.story.findFirst({
       where: { title, ownerId: userId },
@@ -93,6 +94,7 @@ export async function POST(request: NextRequest) {
         description: description || '',
         author: author || '佚名',
         genre: effectiveGenre,
+        storyType: storyType || undefined,
         era,
         ownerId: userId,
         visibility: 'PRIVATE',
@@ -157,6 +159,20 @@ export async function POST(request: NextRequest) {
     }
 
     const fullStory = await prisma.story.findUnique({ where: { id: story.id } });
+
+    // 后台生成封面图：setTimeout 确保脱离请求处理上下文，不会被 Next.js 终止
+    const sid = story.id;
+    setTimeout(() => {
+      generateCoverImage(sid)
+        .then(result => {
+          if (result.success) {
+            console.log(`[stories/create] 封面图生成成功: ${result.coverImageUrl}`);
+          } else {
+            console.warn(`[stories/create] 封面图生成失败: ${result.error}`);
+          }
+        })
+        .catch(e => console.warn('[stories/create] 封面图生成异常:', e));
+    }, 1000);
 
     return NextResponse.json({
       success: true,

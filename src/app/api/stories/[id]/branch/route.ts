@@ -4,7 +4,7 @@ import { getUserIdFromRequest } from '@/lib/auth-helpers';
 import { canViewStory, canCreateBranch } from '@/lib/permissions';
 import { getOrderedChain } from '@/lib/chain-helpers';
 import { characterManager } from '@/lib/character-engine';
-import { buildFullPrompt } from '@/lib/prompt-builder';
+import { buildFullPrompt, correctCharacterNames } from '@/lib/prompt-builder';
 import { callAIText } from '@/lib/ai-client';
 import type { StorySegment } from '@/lib/prisma';
 
@@ -19,7 +19,7 @@ export async function POST(
     }
 
     const { id: storyId } = params;
-    const { segmentId, userDirection, branchTitle } = await request.json();
+    const { segmentId, userDirection, branchTitle, model, visibility } = await request.json();
 
     if (!storyId || !segmentId || !userDirection) {
       return NextResponse.json({ error: '缺少必要参数: segmentId, userDirection' }, { status: 400 });
@@ -57,7 +57,8 @@ export async function POST(
         userDirection,
         characterStateSnapshot,
         ownerId: userId,
-        visibility: 'PRIVATE',
+        visibility: visibility || 'PRIVATE',
+        model: model || null,
       },
     });
 
@@ -73,18 +74,23 @@ export async function POST(
     const relevantChain = idx >= 0 ? mainChain.slice(0, idx + 1) : mainChain;
 
     const tailSegment = relevantChain[relevantChain.length - 1];
-    const prompt = await buildFullPrompt({
+    const { prompt, knownCharacterNames } = await buildFullPrompt({
       storyId,
-      branchId: 'main',
+      branchId,
       tailSegment: tailSegment as any,
       chain: relevantChain as any,
       storyTitle: story.title,
       storyDescription: story.description ?? undefined,
+      branchMode: 'branchCreation',
+      branchDirection: userDirection,
     });
 
-    const finalPrompt = `${prompt}\n\n用户希望的故事走向：${userDirection}\n\n请根据用户指定的方向，续写下一段（150-300字），与前文情节连续。`;
+    let aiContent = await callAIText(prompt, { maxTokens: 2000, story: story as any });
 
-    const aiContent = await callAIText(finalPrompt, { maxTokens: 2000, story: story as any });
+    // 角色名自动纠错
+    if (aiContent && knownCharacterNames.length > 0) {
+      aiContent = correctCharacterNames(aiContent, knownCharacterNames);
+    }
 
     if (!aiContent || aiContent.trim().length === 0) {
       await prisma.storyBranch.delete({ where: { id: branchId } });
@@ -103,6 +109,32 @@ export async function POST(
         visibility: 'PRIVATE',
       },
     });
+
+    // Discover and register characters in the generated content
+    let mentionedIds: string[] = [];
+    try {
+      const mentioned = await characterManager.discoverAndRegisterCharacters(
+        storyId,
+        aiContent,
+        (p: string) => callAIText(p, { maxTokens: 1200, story: story as any }),
+        {
+          genre: story.genre ?? undefined,
+          storyDescription: story.description ?? undefined,
+          callAIWithWebSearchFn: (p: string) => callAIText(p, { maxTokens: 1500, story: story as any, webSearch: true }),
+        },
+      );
+      mentionedIds = mentioned.map(c => c.id);
+    } catch (e) {
+      console.warn('[branch] 角色发现/注册失败:', e);
+    }
+
+    // Update segment with character IDs
+    if (mentionedIds.length > 0) {
+      await prisma.storySegment.update({
+        where: { id: newSegment.id },
+        data: { characterIds: mentionedIds },
+      });
+    }
 
     return NextResponse.json({
       success: true,

@@ -9,6 +9,10 @@ import PacingControls from '@/components/PacingControls';
 import StoryImageDisplay from '@/components/story/StoryImageDisplay';
 import { IMAGE_STYLES, type ImageStyle, type ConcreteImageStyle } from '@/lib/image-styles';
 import type { PacingConfig, Character, StorySegment, StoryBranch } from '@/types/story';
+import LikeButton from '@/components/social/LikeButton';
+import CommentSection from '@/components/social/CommentSection';
+import VisibilityToggle from '@/components/social/VisibilityToggle';
+import ForkBadge from '@/components/social/ForkBadge';
 
 interface Story {
   id: string;
@@ -19,6 +23,8 @@ interface Story {
   genre?: string;
   characterIds?: string[];
   visibility?: string;
+  likeCount?: number;
+  isLiked?: boolean;
 }
 
 export default function StoryDetailPage({ params }: { params: { id: string } }) {
@@ -312,7 +318,12 @@ export default function StoryDetailPage({ params }: { params: { id: string } }) 
       const res = await fetch(`/api/stories/${id}/branch`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ segmentId: branchingSegmentId, userDirection: direction })
+        body: JSON.stringify({
+          segmentId: branchingSegmentId,
+          userDirection: direction,
+          visibility: (document.getElementById('fork-visibility') as HTMLSelectElement)?.value || 'PRIVATE',
+          model: (document.getElementById('fork-model') as HTMLSelectElement)?.value || undefined,
+        })
       });
       if (!res.ok) throw new Error('分叉失败');
       
@@ -469,7 +480,7 @@ export default function StoryDetailPage({ params }: { params: { id: string } }) 
               ))}
             </div>
 
-            <div className="mb-5">
+            <div className="mb-4">
               <label className="block text-sm font-medium text-[var(--ink)] mb-2">✦ 自定义方向</label>
               <textarea
                 value={customDirection}
@@ -478,6 +489,36 @@ export default function StoryDetailPage({ params }: { params: { id: string } }) 
                 rows={2}
                 className="w-full px-3 py-2.5 rounded-lg border border-[var(--border)] bg-[var(--paper)] text-[var(--ink)] placeholder-[var(--muted)] focus:outline-none focus:ring-2 focus:ring-[var(--gold)] focus:border-transparent text-sm resize-none"
               />
+            </div>
+
+            {/* Fork visibility & model options */}
+            <div className="flex items-center gap-4 mb-5 p-3 bg-gray-50 rounded-lg">
+              <div className="flex-1">
+                <label className="block text-xs font-medium text-[var(--muted)] mb-1">可见性</label>
+                <select
+                  className="w-full px-2 py-1.5 border border-gray-200 rounded text-xs bg-white focus:outline-none focus:ring-2 focus:ring-amber-300"
+                  defaultValue="PRIVATE"
+                  id="fork-visibility"
+                >
+                  <option value="PRIVATE">🔒 私有</option>
+                  <option value="PUBLIC">🌐 公开</option>
+                  <option value="UNLISTED">🔗 隐链</option>
+                </select>
+              </div>
+              <div className="flex-1">
+                <label className="block text-xs font-medium text-[var(--muted)] mb-1">AI 模型</label>
+                <select
+                  className="w-full px-2 py-1.5 border border-gray-200 rounded text-xs bg-white focus:outline-none focus:ring-2 focus:ring-amber-300"
+                  defaultValue=""
+                  id="fork-model"
+                >
+                  <option value="">默认模型</option>
+                  <option value="gpt-4o">GPT-4o</option>
+                  <option value="gpt-4o-mini">GPT-4o Mini</option>
+                  <option value="deepseek-chat">DeepSeek Chat</option>
+                  <option value="glm-4">GLM-4</option>
+                </select>
+              </div>
             </div>
 
             <div className="flex gap-3">
@@ -621,6 +662,25 @@ export default function StoryDetailPage({ params }: { params: { id: string } }) 
             </span>
           </div>
         )}
+        {/* Social actions bar */}
+        <div className="flex items-center justify-center gap-4 mt-4">
+          <LikeButton targetId={id} type="story" initialLiked={story.isLiked || false} initialCount={story.likeCount || 0} />
+          <VisibilityToggle
+            currentVisibility={(story as any).visibility || 'PRIVATE'}
+            on_change={async (v) => {
+              const res = await fetch(`/api/stories/${id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ...editForm, visibility: v }),
+              });
+              if (res.ok) {
+                const data = await res.json();
+                setStory(data.story);
+                setEditForm((f: any) => ({ ...f, visibility: v }));
+              }
+            }}
+          />
+        </div>
       </div>
 
       {/* Story content */}
@@ -871,6 +931,11 @@ export default function StoryDetailPage({ params }: { params: { id: string } }) 
       </div>
 
       {showBranchDialog && branchDialog}
+
+      {/* 评论区 */}
+      <div className="max-w-3xl mx-auto px-6">
+        <CommentSection storyId={id} branchId={currentBranchId !== 'main' ? currentBranchId : undefined} />
+      </div>
 
       {/* 编辑故事信息弹窗 */}
       {showEditModal && (

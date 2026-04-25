@@ -13,6 +13,7 @@ import { characterManager } from '@/lib/character-engine';
 import { directorManager } from '@/lib/director-manager';
 import { contextSummarizer } from '@/lib/context-summarizer';
 import { getOrderedChain } from '@/lib/chain-helpers';
+import { getCachedReferenceImages, searchReferenceImages, type ReferenceImageHint } from '@/lib/reference-image-search';
 
 export async function POST(request: NextRequest) {
   try {
@@ -74,6 +75,41 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // D1: 同人 IP 参考图搜索（在 fandom seeding 完成后执行）
+    let referenceImageHints: ReferenceImageHint[] = [];
+    if (storyIdForChars) {
+      try {
+        const state = await directorManager.getState(storyIdForChars);
+        const wv = (state?.worldVariables as Record<string, any>) || {};
+        if (wv.fandom_seeded && wv.fandom_name) {
+          const cached = await getCachedReferenceImages(wv.fandom_name);
+          if (cached.length > 0) {
+            referenceImageHints = cached.map(img => ({
+              localPath: img.localPath,
+              characterName: img.characterName,
+            }));
+          } else {
+            // 异步搜索，不阻塞当前图片生成
+            const characterNames = (await characterManager.list(storyIdForChars))
+              .map(c => {
+                const traits = Array.isArray(c.traits) ? c.traits as string[] : [];
+                const canonical = traits.find((t: string) => t.startsWith('canonical:'));
+                return canonical ? canonical.slice('canonical:'.length) : c.name;
+              })
+              .slice(0, 8);
+
+            searchReferenceImages(
+              wv.fandom_name,
+              wv.fandom_name_en || '',
+              characterNames,
+            ).catch(e => console.warn('[images/generate] 参考图搜索失败:', e));
+          }
+        }
+      } catch (e) {
+        console.warn('[images/generate] 参考图搜索集成失败:', e);
+      }
+    }
+
     // 发现并自动注册段落中出现的所有角色（含新角色）
     // 外观存入 Character.traits，下次命中缓存；新角色首次出现时 AI 实时登记
     const characters: CharacterVisualHint[] = [];
@@ -82,19 +118,22 @@ export async function POST(request: NextRequest) {
         const mentioned = await characterManager.discoverAndRegisterCharacters(
           storyIdForChars,
           segmentContent,
-          (p: string) => callAIText(p, { maxTokens: 300 }),
+          (p: string) => callAIText(p, { maxTokens: 1200 }),
           {
             genre,
             storyDescription,
             // 联网查询分支：GLM 内置 web_search，用来补齐未知角色外观
-            callAIWithWebSearchFn: (p: string) => callAIText(p, { maxTokens: 600, webSearch: true }),
+            callAIWithWebSearchFn: (p: string) => callAIText(p, { maxTokens: 1500, webSearch: true }),
           },
         );
 
         for (const c of mentioned) {
+          // Prefer structured fields, fall back to traits prefix matching
           const traits = Array.isArray(c.traits) ? (c.traits as string[]) : [];
-          const canonicalName = traits.find(t => typeof t === 'string' && t.startsWith('canonical:'))?.slice('canonical:'.length);
-          const appearance = traits.find(t => typeof t === 'string' && t.startsWith('appearance:'))?.slice('appearance:'.length);
+          const canonicalName = (c as any).canonicalName
+            || traits.find(t => typeof t === 'string' && t.startsWith('canonical:'))?.slice('canonical:'.length);
+          const appearance = (c as any).appearance
+            || traits.find(t => typeof t === 'string' && t.startsWith('appearance:'))?.slice('appearance:'.length);
 
           characters.push({
             name: c.name,
@@ -125,30 +164,22 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 方案 A：读取滚动场景状态（英文），保证跨段连贯性
-    // 若为空（race：新段刚写入，fire-and-forget 的 updateSceneState 还没跑完），
-    // 用当前段落内容同步补一次，避免首张图丢失场景信息
+    // 场景状态已由续写路由 await 写入，直接读取即可
     let sceneStateEn: string | undefined;
     if (storyIdForChars) {
       try {
         sceneStateEn = await directorManager.getSceneStatePromptEnglish(storyIdForChars);
-        if (!sceneStateEn || sceneStateEn.trim().length === 0) {
-          await directorManager.updateSceneState(
-            storyIdForChars,
-            segmentContent,
-            (p: string) => callAIText(p, { maxTokens: 400 }),
-          );
-          sceneStateEn = await directorManager.getSceneStatePromptEnglish(storyIdForChars);
-        }
       } catch (e) {
         console.warn('[images/generate] 读取场景状态失败:', e);
       }
     }
 
-    // 方案 B：基于"已登记主要角色集合"派生稳定 seed，锁定视觉一致性
+    // 方案 B：基于角色名 + 段落 ID 派生 seed，保证角色面部一致的同时跨段构图多样
     let seed: number | undefined;
     if (characters.length > 0) {
-      const key = characters.map(c => c.canonicalName || c.name).sort().join('|');
+      const charKey = characters.map(c => c.canonicalName || c.name).sort().join('|');
+      // Incorporate segmentId so different segments get different seeds even with same characters
+      const key = `${charKey}|${segmentId}`;
       let h = 2166136261;
       for (let i = 0; i < key.length; i++) {
         h ^= key.charCodeAt(i);
@@ -192,7 +223,8 @@ export async function POST(request: NextRequest) {
       contextSummary,
       sceneStateEn,
       seed,
-      callAIFn: (p: string) => callAIText(p, { maxTokens: 800 }),
+      referenceImages: referenceImageHints.length > 0 ? referenceImageHints : undefined,
+      callAIFn: (p: string) => callAIText(p, { maxTokens: 1500 }),
     });
 
     // 更新段落的 imageUrls 到数据库（替换旧图，只保留最新一次生成的插图）

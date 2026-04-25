@@ -16,6 +16,7 @@
 import { join } from 'path';
 import { writeFile, mkdir } from 'fs/promises';
 import { existsSync } from 'fs';
+import type { ReferenceImageHint } from './reference-image-search';
 import {
   IMAGE_STYLES,
   type ImageStyle,
@@ -469,6 +470,8 @@ export interface GenerateImagesOptions {
   sceneStateEn?: string;
   /** 可选：图片生成 seed，锁定视觉一致性（同一场景/角色组合下跨段复用） */
   seed?: number;
+  /** 可选：同人 IP 参考图路径列表，注入场景提取 prompt */
+  referenceImages?: ReferenceImageHint[];
 }
 
 /**
@@ -477,7 +480,7 @@ export interface GenerateImagesOptions {
 export async function generateImagesForSegment(
   options: GenerateImagesOptions
 ): Promise<GeneratedImage[]> {
-  const { segmentId, segmentContent, style = 'auto', maxImages = 3, genre, storyDescription, callAIFn, characters, contextSummary, sceneStateEn, seed } = options;
+  const { segmentId, segmentContent, style = 'auto', maxImages = 3, genre, storyDescription, callAIFn, characters, contextSummary, sceneStateEn, seed, referenceImages } = options;
   const config = getConfig();
 
   if (!config.apiKey) {
@@ -487,7 +490,7 @@ export async function generateImagesForSegment(
 
   // 2.2 提取场景描述：有 AI 函数则走 AI（更精准），否则退回启发式
   let scenes = callAIFn
-    ? (await extractSceneDescriptionsWithAI(segmentContent, callAIFn, { genre, storyDescription, characters, contextSummary, sceneStateEn })).slice(0, maxImages)
+    ? (await extractSceneDescriptionsWithAI(segmentContent, callAIFn, { genre, storyDescription, characters, contextSummary, sceneStateEn, referenceImages })).slice(0, maxImages)
     : extractSceneDescriptions(segmentContent).slice(0, maxImages);
 
   if (scenes.length === 0) {
@@ -668,12 +671,26 @@ export async function extractSceneDescriptionsWithAI(
     characters?: CharacterVisualHint[];
     contextSummary?: string;
     sceneStateEn?: string;
+    referenceImages?: ReferenceImageHint[];
   },
 ): Promise<SceneDescription[]> {
   const genreHint = ctx?.genre ? `故事类型：${ctx.genre}` : '';
   const descHint = ctx?.storyDescription ? `故事简介：${ctx.storyDescription.slice(0, 200)}` : '';
   const summaryHint = ctx?.contextSummary ? `近 N 段故事摘要（用于上下文衔接，不要原样复制，只用于理解画面走向）：\n${ctx.contextSummary.slice(0, 1200)}` : '';
   const sceneStateHint = ctx?.sceneStateEn ? `已知场景状态（English, 必须保留进 enPrompt 的环境描述里以保证跨段一致）：${ctx.sceneStateEn}` : '';
+
+  // D2: 同人 IP 参考图视觉锚点
+  let referenceBlock = '';
+  if (ctx?.referenceImages && ctx.referenceImages.length > 0) {
+    const imageList = ctx.referenceImages
+      .map((img, i) => `[${i + 1}] ${img.characterName ? `角色: ${img.characterName}` : '群像'} → ${img.localPath}`)
+      .join('\n');
+    referenceBlock = `
+【IP 参考图】（以下图片是该同人 IP 的官方/经典角色设定图，生成 enPrompt 时必须严格遵循这些参考图的视觉风格和角色外观）：
+${imageList}
+约束：enPrompt 中的角色外观描述必须与参考图一致，不得凭空创造新设计。
+`;
+  }
 
   // 构建角色视觉速查表：中文名 → 英文名 + 外观关键词
   let characterBlock = '';
@@ -712,6 +729,7 @@ ${descHint}
 ${summaryHint}
 ${sceneStateHint}
 ${characterBlock}
+${referenceBlock}
 【当前段落】（镜头必须从这里取）：
 ${segment.slice(0, 1500)}`;
 

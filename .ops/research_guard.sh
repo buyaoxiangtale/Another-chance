@@ -36,8 +36,8 @@ if [[ -z "$ITEM" ]]; then
   exit 0
 fi
 
-# Extract path from item
-ITEM_PATH=$(echo "$ITEM" | sed 's/^- \[ \] \[.*\] //')
+# Extract path from item (supports both [path] prefix and numbered format)
+ITEM_PATH=$(echo "$ITEM" | sed 's/^- \[ \] \(\[[^]]*\] \)\?//')
 CLAIM_FILE="$CLAIM_DIR/$(echo "$ITEM_PATH" | tr '/' '_' | sed 's/\.tsx\?$//').claim"
 
 # Skip if already claimed and in progress
@@ -75,7 +75,8 @@ cd "$REPO"
 # Verify output is non-empty
 if [[ -s "$RESEARCH_FILE" ]]; then
   ESCAPED_PATH=$(printf '%s\n' "$ITEM_PATH" | sed 's/[[\.*^$()+?{|\\]/\\&/g')
-  sed -i "s|^\\- \\[ \\] \\(\\[.*\\] $ESCAPED_PATH\\)|- [x] \\1|" "$CHECKLIST"
+  # Match both formats: "- [ ] [path] item" and "- [ ] 4.1 item"
+  sed -i "s|^\\- \\[ \\] \\(\\[[^]]*\\] \\)\\?$ESCAPED_PATH$|- [x] \\1$ESCAPED_PATH|" "$CHECKLIST"
   log "✅ Completed: $ITEM_PATH"
   rm -f "$CLAIM_FILE"
 else

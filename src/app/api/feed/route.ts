@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { getUserIdFromRequest } from '@/lib/auth-helpers';
 
 export async function GET(request: NextRequest) {
   try {
@@ -31,15 +32,26 @@ export async function GET(request: NextRequest) {
           createdAt: true,
           updatedAt: true,
           owner: { select: { id: true, name: true } },
-          _count: { select: { segments: true, branches: true } },
+          _count: { select: { segments: true, branches: true, likes: true, comments: true } },
         },
       }),
       prisma.story.count({ where }),
     ]);
 
+    // Check if current user liked each story
+    const userId = await getUserIdFromRequest(request);
+    const storiesWithLikeStatus = userId ? await Promise.all(
+      stories.map(async (s) => {
+        const like = await prisma.storyLike.findUnique({
+          where: { userId_storyId: { userId, storyId: s.id } },
+        });
+        return { ...s, isLiked: !!like };
+      })
+    ) : stories;
+
     return NextResponse.json({
       success: true,
-      stories,
+      stories: storiesWithLikeStatus,
       pagination: { page, limit, total, pages: Math.ceil(total / limit) },
     });
   } catch (error) {

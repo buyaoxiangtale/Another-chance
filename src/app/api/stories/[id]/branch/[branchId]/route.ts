@@ -3,6 +3,50 @@ import prisma from '@/lib/prisma';
 import { getUserIdFromRequest } from '@/lib/auth-helpers';
 import { canEditBranch, canViewStory } from '@/lib/permissions';
 
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: { id: string; branchId: string } },
+) {
+  try {
+    const userId = await getUserIdFromRequest(request);
+    if (!userId) return NextResponse.json({ error: '请先登录' }, { status: 401 });
+
+    const { id: storyId, branchId } = params;
+    const { visibility } = await request.json();
+
+    if (!['PRIVATE', 'PUBLIC', 'UNLISTED'].includes(visibility)) {
+      return NextResponse.json({ error: '无效的可见性设置' }, { status: 400 });
+    }
+
+    const story = await prisma.story.findUnique({ where: { id: storyId } });
+    if (!story) return NextResponse.json({ error: '故事不存在' }, { status: 404 });
+
+    const branch = await prisma.storyBranch.findUnique({ where: { id: branchId } });
+    if (!branch || branch.storyId !== storyId) {
+      return NextResponse.json({ error: '分支不存在' }, { status: 404 });
+    }
+
+    if (!canEditBranch(branch, userId)) {
+      return NextResponse.json({ error: '无权修改分支' }, { status: 403 });
+    }
+
+    // Cannot publish branch if parent story is private
+    if (visibility === 'PUBLIC' && story.visibility === 'PRIVATE') {
+      return NextResponse.json({ error: '父故事为私有状态，无法公开分支' }, { status: 400 });
+    }
+
+    const updated = await prisma.storyBranch.update({
+      where: { id: branchId },
+      data: { visibility },
+    });
+
+    return NextResponse.json({ success: true, branch: updated });
+  } catch (error) {
+    console.error('更新分支失败:', error);
+    return NextResponse.json({ error: '更新失败' }, { status: 500 });
+  }
+}
+
 export async function DELETE(
   request: NextRequest,
   { params }: { params: { id: string; branchId: string } },

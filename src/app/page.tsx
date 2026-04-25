@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useSession } from 'next-auth/react';
+import LikeButton from '@/components/social/LikeButton';
 
 interface Story {
   id: string;
@@ -24,6 +25,8 @@ interface Story {
   characterCount?: number;
   visibility?: string;
   ownerId?: string;
+  isLiked?: boolean;
+  _count?: { segments: number; likes: number; comments: number; branches: number };
 }
 
 function StoryCard({ story, index, onDelete, currentUserId }: { story: Story; index: number; onDelete: (id: string) => void; currentUserId?: string }) {
@@ -181,7 +184,18 @@ function StoryCard({ story, index, onDelete, currentUserId }: { story: Story; in
           )}
 
           <div className="flex items-center justify-between pt-3 border-t border-[var(--border)]">
-            <span className="text-xs text-[var(--muted)]">{story.author || '佚名'}</span>
+            <div className="flex items-center gap-3">
+              <LikeButton
+                targetId={story.id}
+                type="story"
+                size="sm"
+                initialLiked={story.isLiked || false}
+                initialCount={story._count?.likes || 0}
+              />
+              {story._count?.comments && story._count.comments > 0 && (
+                <span className="text-xs text-[var(--muted)]">💬 {story._count.comments}</span>
+              )}
+            </div>
             <span className="text-sm text-[var(--gold)] font-medium flex items-center gap-1">开始阅读 →</span>
           </div>
         </div>

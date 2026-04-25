@@ -5,6 +5,7 @@
 
 import prisma from '@/lib/prisma';
 import { FICTION_KEYWORDS } from './genre-config';
+import { callAIText } from './ai-client';
 
 type StorySegment = NonNullable<Awaited<ReturnType<typeof prisma.storySegment.findUnique>>>;
 
@@ -58,54 +59,14 @@ function parseAIJson(response: string): any {
 }
 
 /**
- * AI 调用方法，复用项目已有的 AI 调用配置
+ * AI 调用方法，委托给 ai-client.ts 的队列+重试机制
  */
 async function callAI(prompt: string, maxTokens: number = 1000, systemPrompt?: string, genre?: string): Promise<string> {
-  const baseUrl = process.env.AI_BASE_URL || 'https://api.openai.com/v1';
-  const apiKey = process.env.AI_API_KEY || '';
-  const model = process.env.AI_MODEL || 'gpt-3.5-turbo';
-
-  let temperature = 0.5;
-  let top_p = 0.85;
-  let frequency_penalty = 0.3;
-
-  if (genre) {
-    const isFiction = FICTION_KEYWORDS.some(k => genre.includes(k));
-    if (isFiction) {
-      temperature = 0.6;
-      top_p = 0.9;
-    } else {
-      temperature = 0.4;
-      top_p = 0.8;
-    }
-  }
-
-  const res = await fetch(`${baseUrl}/chat/completions`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model,
-      messages: [
-        { role: 'system', content: systemPrompt || '你是一位擅长文学创作的故事摘要专家。请用中文回答，提取故事段落的关键信息。' },
-        { role: 'user', content: prompt }
-      ],
-      temperature,
-      top_p,
-      frequency_penalty,
-      max_tokens: maxTokens
-    })
+  return callAIText(prompt, {
+    systemPrompt: systemPrompt || '你是一位擅长文学创作的故事摘要专家。请用中文回答，提取故事段落的关键信息。',
+    maxTokens,
+    priority: 'low',
   });
-
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`AI API error ${res.status}: ${text}`);
-  }
-
-  const data = await res.json();
-  return data.choices?.[0]?.message?.content || '';
 }
 
 /**
@@ -236,7 +197,7 @@ async function generateAISummary(segment: StorySegment, chain: StorySegment[], g
 
   try {
     const prompt = AISUMMARY_PROMPT.replace('{{content}}', segment.content);
-    const aiResponse = await callAI(prompt, 800, undefined, genre);
+    const aiResponse = await callAI(prompt, 2000, undefined, genre);
 
     let summary: any;
     try {
@@ -427,7 +388,7 @@ ${groupTexts}
 
 请只输出合并后的摘要文本：`;
 
-        const aiResponse = await callAI(prompt, 300, undefined, genre);
+        const aiResponse = await callAI(prompt, 1200, undefined, genre);
         const label = `段落 ${i + 1}-${Math.min(i + groupSize, summaries.length)}`;
         const groupSummary: GroupSummary = {
           label,

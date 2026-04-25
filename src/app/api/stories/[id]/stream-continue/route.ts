@@ -3,7 +3,7 @@ import prisma from '@/lib/prisma';
 import { getUserIdFromRequest } from '@/lib/auth-helpers';
 import { canViewStory } from '@/lib/permissions';
 import { getOrderedChain } from '@/lib/chain-helpers';
-import { buildFullPrompt } from '@/lib/prompt-builder';
+import { buildFullPrompt, correctCharacterNames } from '@/lib/prompt-builder';
 import { PacingEngine } from '@/lib/pacing-engine';
 import { consistencyChecker } from '@/lib/consistency-checker';
 import { callAI, callAIText, buildOpenAIRequest, aiRequestQueue } from '@/lib/ai-client';
@@ -11,6 +11,7 @@ import { contextSummarizer } from '@/lib/context-summarizer';
 import { generateImagesForSegment } from '@/lib/image-generator';
 import { characterManager } from '@/lib/character-engine';
 import { directorManager } from '@/lib/director-manager';
+import { EventTracker } from '@/lib/event-tracker';
 
 export async function POST(
   request: NextRequest,
@@ -42,7 +43,7 @@ export async function POST(
     }
     const tailSegment = chain[chain.length - 1];
 
-    const prompt = await buildFullPrompt({
+    const { prompt, knownCharacterNames } = await buildFullPrompt({
       storyId,
       branchId,
       tailSegment: tailSegment as any,
@@ -157,17 +158,22 @@ export async function POST(
             return;
           }
 
+          // 角色名自动纠错：将 AI 写错的人名修正为已知角色名
+          if (knownCharacterNames.length > 0) {
+            fullContent = correctCharacterNames(fullContent, knownCharacterNames);
+          }
+
           // 记忆连贯性：发现并自动注册新角色；返回"段落中所有角色（含新注册）"
           let mentionedIds: string[] = [];
           try {
             const mentioned = await characterManager.discoverAndRegisterCharacters(
               storyId,
               fullContent,
-              (p: string) => callAIText(p, { maxTokens: 300, story: story as any }),
+              (p: string) => callAIText(p, { maxTokens: 1200, story: story as any }),
               {
                 genre: story.genre ?? undefined,
                 storyDescription: story.description ?? undefined,
-                callAIWithWebSearchFn: (p: string) => callAIText(p, { maxTokens: 600, story: story as any, webSearch: true }),
+                callAIWithWebSearchFn: (p: string) => callAIText(p, { maxTokens: 1500, story: story as any, webSearch: true }),
               },
             );
             mentionedIds = mentioned.map(c => c.id);
@@ -198,17 +204,28 @@ export async function POST(
           if (mentionedIds.length > 0) {
             characterManager
               .inferAndUpdateStatesForSegment(storyId, newSegment.id, fullContent, (p: string) =>
-                callAIText(p, { maxTokens: 300, story: story as any })
+                callAIText(p, { maxTokens: 1200, story: story as any })
               )
               .catch((e: any) => console.warn('[stream-continue] 角色状态更新失败:', e));
           }
 
-          // 方案 A：增量更新滚动场景状态（location/time/weather/在场角色/服装）
-          directorManager
-            .updateSceneState(storyId, fullContent, (p: string) =>
-              callAIText(p, { maxTokens: 400, story: story as any })
-            )
-            .catch((e: any) => console.warn('[stream-continue] 场景状态更新失败:', e));
+          // 场景状态更新必须 await，确保后续 images/generate 能读到最新值
+          try {
+            await directorManager.updateSceneState(storyId, fullContent, (p: string) =>
+              callAIText(p, { maxTokens: 1200, story: story as any })
+            );
+          } catch (e) {
+            console.warn('[stream-continue] 场景状态更新失败:', e);
+          }
+
+          // 关键事件提取与持久化（fire-and-forget）
+          new EventTracker()
+            .processSegment(storyId, branchId, {
+              id: newSegment.id,
+              content: fullContent,
+              characterIds: mentionedIds,
+            })
+            .catch((e: any) => console.warn('[stream-continue] 事件提取失败:', e));
 
           try {
             const postIssues = await consistencyChecker.runConsistencyCheck(newSegment as any, [...chain, newSegment] as any);

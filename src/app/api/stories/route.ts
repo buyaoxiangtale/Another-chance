@@ -3,6 +3,7 @@ import prisma from '@/lib/prisma';
 import { getUserIdFromRequest } from '@/lib/auth-helpers';
 import { canViewStory } from '@/lib/permissions';
 import { STORY_TYPE_TO_GENRE } from '@/lib/genre-config';
+import { characterManager } from '@/lib/character-engine';
 
 export async function GET(request: NextRequest) {
   try {
@@ -29,12 +30,25 @@ export async function GET(request: NextRequest) {
     const stories = await prisma.story.findMany({
       where,
       orderBy: { createdAt: 'desc' },
-      include: { _count: { select: { segments: true } } },
+      include: {
+        _count: { select: { segments: true, likes: true, comments: true, branches: true } },
+        owner: { select: { id: true, name: true, image: true } },
+      },
     });
+
+    // Add isLiked for each story if user is logged in
+    const storiesWithLikeStatus = userId ? await Promise.all(
+      stories.map(async (s) => {
+        const like = await prisma.storyLike.findUnique({
+          where: { userId_storyId: { userId, storyId: s.id } },
+        });
+        return { ...s, isLiked: !!like };
+      })
+    ) : stories;
 
     return NextResponse.json({
       success: true,
-      stories,
+      stories: storiesWithLikeStatus,
       total: stories.length,
     });
   } catch (error) {
@@ -54,7 +68,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { title, description, author, genre, era, storyType } = body;
+    const { title, description, author, genre, era, storyType, characters } = body;
 
     if (!title) {
       return NextResponse.json({ error: '故事标题是必填项' }, { status: 400 });
@@ -102,6 +116,45 @@ export async function POST(request: NextRequest) {
       where: { id: story.id },
       data: { rootSegmentId: firstSegment.id },
     });
+
+    // 注册前端传入的初始角色
+    if (Array.isArray(characters) && characters.length > 0) {
+      const characterIds: string[] = [];
+      for (const char of characters) {
+        if (!char.name || !char.name.trim()) continue;
+        // 过滤非中文名
+        if (!/[\u4e00-\u9fff]/.test(char.name)) continue;
+        try {
+          const traits: string[] = [];
+          if (Array.isArray(char.traits)) {
+            traits.push(...char.traits.filter((t: string) => typeof t === 'string' && t.trim()));
+          }
+          const role = ['protagonist', 'antagonist', 'supporting', 'narrator'].includes(char.role)
+            ? char.role : 'supporting';
+          const newChar = await characterManager.create({
+            name: char.name.trim(),
+            era: era || '',
+            role,
+            traits,
+            storyId: story.id,
+          });
+          characterIds.push(newChar.id);
+        } catch (e) {
+          console.warn(`[stories/create] 注册初始角色 "${char.name}" 失败:`, e);
+        }
+      }
+      // 将角色 ID 关联到首段
+      if (characterIds.length > 0) {
+        await prisma.storySegment.update({
+          where: { id: firstSegment.id },
+          data: { characterIds },
+        });
+        await prisma.story.update({
+          where: { id: story.id },
+          data: { characterIds },
+        });
+      }
+    }
 
     const fullStory = await prisma.story.findUnique({ where: { id: story.id } });
 

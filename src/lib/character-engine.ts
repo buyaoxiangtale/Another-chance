@@ -35,19 +35,28 @@ export class CharacterManager {
     stateHistory?: any[];
     coreMotivation?: string;
     storyId: string;
+    appearance?: string;
+    canonicalName?: string;
   }): Promise<Character> {
+    // Extract appearance/canonicalName from traits prefix format if not explicitly provided
+    const traitsArr = data.traits || [];
+    const appearanceFromTraits = traitsArr.find((t: string) => typeof t === 'string' && t.startsWith('appearance:'))?.slice('appearance:'.length);
+    const canonicalFromTraits = traitsArr.find((t: string) => typeof t === 'string' && t.startsWith('canonical:'))?.slice('canonical:'.length);
+
     return prisma.character.create({
       data: {
         id: genId(),
         name: data.name,
         era: data.era || '',
         role: data.role || 'supporting',
-        traits: data.traits || [],
+        traits: traitsArr,
         speechPatterns: data.speechPatterns || '',
         relationships: data.relationships || [],
         stateHistory: data.stateHistory || [],
         coreMotivation: data.coreMotivation || '',
         storyId: data.storyId,
+        appearance: data.appearance || appearanceFromTraits || '',
+        canonicalName: data.canonicalName || canonicalFromTraits || '',
       },
     });
   }
@@ -86,7 +95,10 @@ export class CharacterManager {
       }
     }
 
-    const activeCharacters = characters.filter(c => involvedIds.has(c.id));
+    // 如果 segment 链中没有记录 characterIds（旧数据或发现失败），回退为展示全部角色
+    const activeCharacters = involvedIds.size > 0
+      ? characters.filter(c => involvedIds.has(c.id))
+      : characters;
     return {
       activeCharacters,
       segmentId,
@@ -341,6 +353,7 @@ confidence < 0.6 时，isFandom 必须为 false。`;
     for (const item of roster) {
       const name = (item.name || '').trim();
       if (!name || existingNames.has(name)) continue;
+      if (!/[\u4e00-\u9fff]/.test(name)) continue; // 过滤非中文名
       if (!item.appearance) continue;
 
       const traits: string[] = [];
@@ -453,7 +466,7 @@ ${segmentContent.slice(0, 2000)}`;
         const parsed = JSON.parse(m[0]);
         if (Array.isArray(parsed)) {
           extractedNames = parsed
-            .filter((n: any) => typeof n === 'string' && n.trim().length > 0 && n.length <= 30)
+            .filter((n: any) => typeof n === 'string' && n.trim().length > 0 && n.length <= 30 && /[\u4e00-\u9fff]/.test(n))
             .map((n: string) => n.trim());
         }
       }
@@ -543,6 +556,8 @@ ${fandomHint}${webContext ? webContext + '\n\n' : ''}严格输出一个 JSON 对
           traits,
           coreMotivation: (parsed.coreMotivation || '').slice(0, 200),
           storyId,
+          appearance: (parsed.appearance || '').slice(0, 400),
+          canonicalName: (parsed.canonicalName || '').slice(0, 80),
         });
         created.push(newChar);
         console.log(`[character-engine] 自动注册角色：${name} → ${parsed.canonicalName || '(无英文名)'}`);

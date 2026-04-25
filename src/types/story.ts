@@ -81,6 +81,12 @@ export type Story = {
   era?: string;
   genre?: string;
   characterIds?: string[];
+  // Social
+  ownerId?: string;
+  visibility?: 'PRIVATE' | 'PUBLIC' | 'UNLISTED';
+  likeCount?: number;
+  commentCount?: number;
+  forkCount?: number;
 };
 
 export type StorySegment = {
@@ -116,6 +122,39 @@ export type StoryBranch = {
   // C1: 1.7 扩展
   characterStateSnapshot?: Record<string, string>;
   forkTimeline?: TimelineEvent;
+  // Social: fork tracking
+  model?: string;
+  ownerId?: string;
+  visibility?: 'PRIVATE' | 'PUBLIC' | 'UNLISTED';
+  ownerName?: string;
+  likeCount?: number;
+  commentCount?: number;
+};
+
+// === 社交功能类型 ===
+
+export type CommentData = {
+  id: string;
+  content: string;
+  createdAt: string;
+  updatedAt: string;
+  userId: string;
+  storyId?: string;
+  branchId?: string;
+  parentId?: string;
+  user: { id: string; name: string; image?: string };
+  _count?: { likes: number };
+  liked?: boolean;
+  replies?: CommentData[];
+};
+
+export type StoryLikeData = {
+  id: string;
+  userId: string;
+  storyId?: string;
+  branchId?: string;
+  createdAt: string;
+  user?: { id: string; name: string; image?: string };
 };
 
 // API 请求/响应类型

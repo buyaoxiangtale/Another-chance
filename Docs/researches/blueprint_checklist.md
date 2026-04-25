@@ -26,8 +26,8 @@
 - [x] 3.6 添加图片加载骨架屏动画
 
 ## Phase 4: 配置与测试
-- [ ] 4.1 在 `.env.local.example` 中添加图片生成相关环境变量
-- [ ] 4.2 验证 build 不报错（`npm run build`）
+- [x] 4.1 在 `.env.local.example` 中添加图片生成相关环境变量
+- [x] 4.2 验证 build 不报错（`npm run build`）
 - [ ] 4.3 手动测试：续写故事 → 自动生成图片 → 图片正确展示
 
 ## API 路由层

@@ -1,9 +1,11 @@
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  previewFeatures = ["driverAdapters"]
 }
 
 datasource db {
   provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 // ========== 枚举 ==========
@@ -30,6 +32,9 @@ model User {
   sessions     Session[]
   stories      Story[]
   branches     StoryBranch[]
+  storyLikes   StoryLike[]
+  comments     Comment[]
+  commentLikes CommentLike[]
 
   @@map("users")
 }
@@ -98,6 +103,8 @@ model Story {
   rootSegment   StorySegment?  @relation("StoryRoot", fields: [rootSegmentId], references: [id])
   directorStates DirectorState[]
   events        KeyEvent[]
+  likes         StoryLike[]
+  comments      Comment[]
 
   @@index([visibility, publishedAt])
   @@index([ownerId])
@@ -154,6 +161,10 @@ model StoryBranch {
   story                  Story        @relation(fields: [storyId], references: [id], onDelete: Cascade)
   sourceSegment          StorySegment @relation("BranchSource", fields: [sourceSegmentId], references: [id])
 
+  model                  String?   // AI model used for fork generation
+  likes                  StoryLike[]
+  comments               Comment[]
+
   @@index([storyId])
   @@index([ownerId])
   @@index([visibility])
@@ -172,6 +183,8 @@ model Character {
   traits         Json     @default("[]")
   relationships  Json     @default("[]")
   stateHistory   Json     @default("[]")
+  appearance     String?  @default("")
+  canonicalName  String?  @default("")
 
   storyId        String
   story          Story    @relation(fields: [storyId], references: [id], onDelete: Cascade)
@@ -235,4 +248,62 @@ model KeyEvent {
   @@index([storyId])
   @@index([storyId, branchId])
   @@map("key_events")
+}
+
+// ========== 社交功能模型 ==========
+
+model StoryLike {
+  id        String   @id @default(cuid())
+  userId    String
+  storyId   String?
+  branchId  String?
+  createdAt DateTime @default(now())
+
+  user   User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  story  Story?        @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  branch StoryBranch?  @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, storyId])
+  @@unique([userId, branchId])
+  @@index([storyId])
+  @@index([branchId])
+  @@map("story_likes")
+}
+
+model Comment {
+  id        String   @id @default(cuid())
+  content   String   @db.Text
+  userId    String
+  storyId   String?
+  branchId  String?
+  parentId  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user     User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  story    Story?         @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  branch   StoryBranch?   @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  parent   Comment?       @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies  Comment[]      @relation("CommentReplies")
+  likes    CommentLike[]
+
+  @@index([storyId, createdAt])
+  @@index([branchId, createdAt])
+  @@index([parentId])
+  @@index([userId])
+  @@map("comments")
+}
+
+model CommentLike {
+  id        String   @id @default(cuid())
+  userId    String
+  commentId String
+  createdAt DateTime @default(now())
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  comment Comment @relation(fields: [commentId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, commentId])
+  @@index([commentId])
+  @@map("comment_likes")
 }

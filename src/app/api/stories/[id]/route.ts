@@ -19,7 +19,24 @@ export async function GET(
       return NextResponse.json({ error: '无权查看' }, { status: 403 });
     }
 
-    return NextResponse.json({ success: true, story });
+    // Fetch like count and user's like status
+    const [likeCount, myLike] = await Promise.all([
+      prisma.storyLike.count({ where: { storyId: params.id } }),
+      userId
+        ? prisma.storyLike.findUnique({
+            where: { userId_storyId: { userId, storyId: params.id } },
+          })
+        : null,
+    ]);
+
+    return NextResponse.json({
+      success: true,
+      story: {
+        ...story,
+        likeCount,
+        isLiked: !!myLike,
+      },
+    });
   } catch (error) {
     return NextResponse.json({ error: '获取故事失败' }, { status: 500 });
   }

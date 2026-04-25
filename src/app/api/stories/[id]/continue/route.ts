@@ -10,6 +10,7 @@ import { consistencyChecker } from '@/lib/consistency-checker';
 import { callAIText } from '@/lib/ai-client';
 import { classifyGenre } from '@/lib/genre-config';
 import { characterManager } from '@/lib/character-engine';
+import { EventTracker } from '@/lib/event-tracker';
 import type { StorySegment } from '@/lib/prisma';
 
 export async function POST(
@@ -67,7 +68,7 @@ export async function POST(
     // Build prompt
     let prompt: string;
     if (pacingConfig || directorOverrides) {
-      prompt = await buildFullPrompt({
+      prompt = (await buildFullPrompt({
         storyId,
         branchId,
         tailSegment: tailSegment as any,
@@ -76,7 +77,7 @@ export async function POST(
         storyDescription: story.description ?? undefined,
         pacingConfig,
         directorOverrides,
-      });
+      })).prompt;
     } else {
       const genre = story.genre || '';
       const description = story.description || '';
@@ -89,7 +90,11 @@ export async function POST(
         `${s.title ? `【${s.title}】` : ''}${s.content}`,
       ).join('\n');
 
-      prompt = `故事标题：${story.title}\n故事背景：${story.description || ''}\n\n当前故事进展：\n${contextSummary}\n\n${styleHint}下一段（150-300字），与前文情节连续。`;
+      const continuityHint = branchId !== 'main'
+        ? '，延续本分支的独立叙事，只使用前文已出现的角色'
+        : '，与前文情节连续。';
+
+      prompt = `故事标题：${story.title}\n故事背景：${story.description || ''}\n\n当前故事进展：\n${contextSummary}\n\n${styleHint}下一段（150-300字）${continuityHint}`;
     }
 
     const maxTokens = pacingConfig?.pace === 'detailed' ? 4000 : 2000;
@@ -120,11 +125,11 @@ export async function POST(
       const mentioned = await characterManager.discoverAndRegisterCharacters(
         storyId,
         aiResponse,
-        (p: string) => callAIText(p, { maxTokens: 300, story: story as any }),
+        (p: string) => callAIText(p, { maxTokens: 1200, story: story as any }),
         {
           genre: story.genre ?? undefined,
           storyDescription: story.description ?? undefined,
-          callAIWithWebSearchFn: (p: string) => callAIText(p, { maxTokens: 600, story: story as any, webSearch: true }),
+          callAIWithWebSearchFn: (p: string) => callAIText(p, { maxTokens: 1500, story: story as any, webSearch: true }),
         },
       );
       mentionedIds = mentioned.map(c => c.id);
@@ -151,17 +156,28 @@ export async function POST(
     if (mentionedIds.length > 0) {
       characterManager
         .inferAndUpdateStatesForSegment(storyId, newSegment.id, aiResponse, (p: string) =>
-          callAIText(p, { maxTokens: 300, story: story as any })
+          callAIText(p, { maxTokens: 1200, story: story as any })
         )
         .catch((e: any) => console.warn('[continue] 角色状态更新失败:', e));
     }
 
-    // 方案 A：增量更新滚动场景状态（location/time/weather/在场角色/服装）
-    directorManager
-      .updateSceneState(storyId, aiResponse, (p: string) =>
-        callAIText(p, { maxTokens: 400, story: story as any })
-      )
-      .catch((e: any) => console.warn('[continue] 场景状态更新失败:', e));
+    // 场景状态更新必须 await，确保后续 images/generate 能读到最新值
+    try {
+      await directorManager.updateSceneState(storyId, aiResponse, (p: string) =>
+        callAIText(p, { maxTokens: 1200, story: story as any })
+      );
+    } catch (e) {
+      console.warn('[continue] 场景状态更新失败:', e);
+    }
+
+    // 关键事件提取与持久化（fire-and-forget）
+    new EventTracker()
+      .processSegment(storyId, branchId, {
+        id: newSegment.id,
+        content: aiResponse,
+        characterIds: mentionedIds,
+      })
+      .catch((e: any) => console.warn('[continue] 事件提取失败:', e));
 
     // Post-write consistency check
     try {

@@ -30,8 +30,8 @@ export default function CharacterPanel({ storyId, branchId, segmentId, isOpen, o
         ? fetch(`/api/stories/${storyId}/characters?branchId=${branchId}`).then(r => r.json())
         : Promise.resolve({ relationships: [] }),
     ]).then(([charData, relData]) => {
-      setCharacters(Array.isArray(charData) ? charData : charData.characters || []);
-      setRelationships(relData.relationships || []);
+      setCharacters(Array.isArray(charData) ? charData : charData.activeCharacters || charData.characters || []);
+      setRelationships(relData.edges || relData.relationships || []);
     }).catch(() => {}).finally(() => setLoading(false));
   }, [storyId, branchId, segmentId, isOpen]);
 

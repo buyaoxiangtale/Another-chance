@@ -432,5 +432,59 @@ export async function callAIText(prompt: string, options: {
 } = {}): Promise<string> {
   const response = await callAI(prompt, options);
   const data = await response.json();
-  return data.choices?.[0]?.message?.content || '';
+  const msg = data.choices?.[0]?.message;
+  // GLM-5 等推理模型的正文在 reasoning_content 里，content 为空
+  return msg?.content || msg?.reasoning_content || '';
+}
+
+/**
+ * 从 AI 返回文本中健壮地提取 JSON（数组或对象）。
+ * 处理 GLM 推理模型 reasoning_content 中混入思考文本的情况：
+ * 从后往前找 JSON 结构（答案在末尾），用平衡括号匹配确保完整性。
+ */
+export function extractJsonFromAI<T = unknown>(text: string): T | null {
+  if (!text || !text.trim()) return null;
+  const trimmed = text.trim();
+
+  // 1. 直接解析
+  try { return JSON.parse(trimmed) as T; } catch {}
+
+  // 2. 剥离 markdown 代码块后解析
+  const stripped = trimmed
+    .replace(/^```(?:json)?\s*\n?/i, '')
+    .replace(/\n?```\s*$/i, '')
+    .trim();
+  try { return JSON.parse(stripped) as T; } catch {}
+
+  // 3. 平衡括号匹配：从后往前找（推理模型答案在末尾）
+  for (const [open, close] of [['[', ']'], ['{', '}']]) {
+    // 从后往前找所有 open 的位置，优先匹配末尾的（更可能是实际答案）
+    const positions: number[] = [];
+    for (let i = text.length - 1; i >= 0; i--) {
+      if (text[i] === open) positions.push(i);
+    }
+
+    for (const startIdx of positions) {
+      let depth = 0;
+      let inString = false;
+      let escape = false;
+
+      for (let i = startIdx; i < text.length; i++) {
+        const ch = text[i];
+        if (escape) { escape = false; continue; }
+        if (ch === '\\') { escape = true; continue; }
+        if (ch === '"') { inString = !inString; continue; }
+        if (inString) continue;
+        if (ch === open) depth++;
+        if (ch === close) depth--;
+        if (depth === 0) {
+          const candidate = text.slice(startIdx, i + 1);
+          try { return JSON.parse(candidate) as T; } catch {}
+          break;
+        }
+      }
+    }
+  }
+
+  return null;
 }

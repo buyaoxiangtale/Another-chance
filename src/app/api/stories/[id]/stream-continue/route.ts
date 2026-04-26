@@ -43,7 +43,7 @@ export async function POST(
     }
     const tailSegment = chain[chain.length - 1];
 
-    const { prompt, knownCharacterNames } = await buildFullPrompt({
+    const { prompt, registeredCharacterNames } = await buildFullPrompt({
       storyId,
       branchId,
       tailSegment: tailSegment as any,
@@ -158,9 +158,9 @@ export async function POST(
             return;
           }
 
-          // 角色名自动纠错：将 AI 写错的人名修正为已知角色名
-          if (knownCharacterNames.length > 0) {
-            fullContent = correctCharacterNames(fullContent, knownCharacterNames);
+          // 角色名自动纠错：仅使用注册角色名，避免启发式提取的误报导致级联替换
+          if (registeredCharacterNames.length > 0) {
+            fullContent = correctCharacterNames(fullContent, registeredCharacterNames);
           }
 
           // 记忆连贯性：发现并自动注册新角色；返回"段落中所有角色（含新注册）"
@@ -179,6 +179,17 @@ export async function POST(
             mentionedIds = mentioned.map(c => c.id);
           } catch (e) {
             console.warn('[stream-continue] 角色发现/注册失败:', e);
+          }
+
+          // 乐观锁：确认 tail 没有被其他请求抢先追加
+          const currentChain = await getOrderedChain(storyId, branchId);
+          const currentTail = currentChain[currentChain.length - 1];
+          if (currentTail?.id !== tailSegment.id) {
+            const conflictEvent = { type: 'error', message: '该分支已有新内容产生，请刷新后重试' };
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify(conflictEvent)}\n\n`));
+            controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+            controller.close();
+            return;
           }
 
           const newSegment = await prisma.storySegment.create({

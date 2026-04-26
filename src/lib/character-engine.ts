@@ -2,6 +2,7 @@ import type { Character as PrismaCharacter, StorySegment as PrismaSegment, Story
 import prisma from '@/lib/prisma';
 import { getOrderedChain } from '@/lib/chain-helpers';
 import { hasExplicitWebSearch, webSearch, formatSearchResultsForPrompt } from '@/lib/web-search';
+import { extractJsonFromAI } from './ai-client';
 
 type StorySegment = PrismaSegment;
 type Character = PrismaCharacter;
@@ -291,9 +292,8 @@ confidence < 0.6 时，isFandom 必须为 false。`;
     let fandomNameEn = '';
     try {
       const raw = await ctx.callAIWithWebSearchFn(detectPrompt);
-      const m = raw.match(/\{[\s\S]*\}/);
-      if (!m) return { seeded: false, created: [] };
-      const parsed = JSON.parse(m[0]) as { isFandom?: boolean; fandomName?: string; fandomNameEn?: string; confidence?: number };
+      const parsed = extractJsonFromAI<{ isFandom?: boolean; fandomName?: string; fandomNameEn?: string; confidence?: number }>(raw);
+      if (!parsed) return { seeded: false, created: [] };
       if (!parsed.isFandom || (parsed.confidence ?? 0) < 0.6) {
         // 非 IP：仍标记已处理，避免每次都跑 detect
         await directorManager.updateState(storyId, {
@@ -333,12 +333,9 @@ confidence < 0.6 时，isFandom 必须为 false。`;
 
     try {
       const raw = await ctx.callAIWithWebSearchFn(rosterPrompt);
-      const m = raw.match(/\[[\s\S]*\]/);
-      if (!m) return { seeded: false, created: [] };
-      const parsed = JSON.parse(m[0]);
-      if (Array.isArray(parsed)) {
-        roster = parsed.slice(0, 15);
-      }
+      const parsed = extractJsonFromAI<any[]>(raw);
+      if (!parsed || !Array.isArray(parsed)) return { seeded: false, created: [] };
+      roster = parsed.slice(0, 15);
     } catch (e) {
       console.warn('[character-engine] fandom 角色池拉取失败:', e);
       return { seeded: false, created: [] };
@@ -461,14 +458,11 @@ confidence < 0.6 时，isFandom 必须为 false。`;
 ${segmentContent.slice(0, 2000)}`;
 
       const raw = await callAIFn(nerPrompt);
-      const m = raw.match(/\[[\s\S]*\]/);
-      if (m) {
-        const parsed = JSON.parse(m[0]);
-        if (Array.isArray(parsed)) {
-          extractedNames = parsed
-            .filter((n: any) => typeof n === 'string' && n.trim().length > 0 && n.length <= 30 && /[\u4e00-\u9fff]/.test(n))
-            .map((n: string) => n.trim());
-        }
+      const parsed = extractJsonFromAI<string[]>(raw);
+      if (Array.isArray(parsed)) {
+        extractedNames = parsed
+          .filter((n: any) => typeof n === 'string' && n.trim().length > 0 && n.length <= 30 && /[\u4e00-\u9fff]/.test(n))
+          .map((n: string) => n.trim());
       }
     } catch (e) {
       console.warn('[character-engine] 人物名 NER 失败:', e);
@@ -531,16 +525,14 @@ ${fandomHint}${webContext ? webContext + '\n\n' : ''}严格输出一个 JSON 对
         // 若没显式搜索结果，就走"带联网能力的 LLM"（如 GLM 内置 web_search）
         const runner = !webContext && ctx?.callAIWithWebSearchFn ? ctx.callAIWithWebSearchFn : callAIFn;
         const raw = await runner(infoPrompt);
-        const m = raw.match(/\{[\s\S]*\}/);
-        if (!m) continue;
-        const parsed = JSON.parse(m[0]) as {
+        const parsed = extractJsonFromAI<{
           canonicalName?: string;
           era?: string;
           role?: string;
           appearance?: string;
           coreMotivation?: string;
-        };
-        if (!parsed.appearance) continue; // 至少要拿到外观才有注册意义
+        }>(raw);
+        if (!parsed || !parsed.appearance) continue;
 
         const traits: string[] = [];
         if (parsed.canonicalName) traits.push(`canonical:${parsed.canonicalName.slice(0, 80)}`);
@@ -598,10 +590,8 @@ ${segmentContent.slice(0, 1500)}
 只输出这些角色：${nameList}`;
 
       const raw = await callAIFn(prompt);
-      const m = raw.match(/\[[\s\S]*\]/);
-      if (!m) return;
-      const parsed = JSON.parse(m[0]) as Array<{ name: string; state: string }>;
-      if (!Array.isArray(parsed)) return;
+      const parsed = extractJsonFromAI<Array<{ name: string; state: string }>>(raw);
+      if (!parsed || !Array.isArray(parsed)) return;
 
       for (const entry of parsed) {
         const c = chars.find(x => x.name === entry.name);

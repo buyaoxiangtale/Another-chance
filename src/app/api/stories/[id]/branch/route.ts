@@ -74,7 +74,7 @@ export async function POST(
     const relevantChain = idx >= 0 ? mainChain.slice(0, idx + 1) : mainChain;
 
     const tailSegment = relevantChain[relevantChain.length - 1];
-    const { prompt, knownCharacterNames } = await buildFullPrompt({
+    const { prompt, registeredCharacterNames } = await buildFullPrompt({
       storyId,
       branchId,
       tailSegment: tailSegment as any,
@@ -87,9 +87,9 @@ export async function POST(
 
     let aiContent = await callAIText(prompt, { maxTokens: 2000, story: story as any });
 
-    // 角色名自动纠错
-    if (aiContent && knownCharacterNames.length > 0) {
-      aiContent = correctCharacterNames(aiContent, knownCharacterNames);
+    // 角色名自动纠错：仅使用注册角色名，避免启发式提取的误报导致级联替换
+    if (aiContent && registeredCharacterNames.length > 0) {
+      aiContent = correctCharacterNames(aiContent, registeredCharacterNames);
     }
 
     if (!aiContent || aiContent.trim().length === 0) {

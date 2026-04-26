@@ -41,15 +41,36 @@ export interface BuildPromptOptions {
 /**
  * 角色名自动纠错：检测 AI 输出中与已知角色名"形近但不完全相同"的片段并替换。
  * 处理"满穂→满穃"类低频字/形近字错误：同长度、同首字、仅 1 字差异的子串替换为正确名字。
+ *
+ * 安全措施：
+ * - 仅使用从 Character 表注册的角色名（不使用启发式提取的"人名"）
+ * - 跳过以指示代词（这/那/此/其等）开头的"名字"
+ * - 每个名字最多纠正 3 次，防止级联错误
+ * - 纠正后跳过已替换区域，避免重叠替换
  */
 export function correctCharacterNames(text: string, knownNames: string[]): string {
+  if (!knownNames || knownNames.length === 0) return text;
+
   let result = text;
   for (const correctName of knownNames) {
     if (!correctName || correctName.length < 2) continue;
-    for (let i = 0; i <= result.length - correctName.length; i++) {
+    // 跳过以指示代词/常见虚词开头的"名字"——这些几乎不可能是人名
+    if (/^[这那此其每各哪什么如何若虽但是而又]/.test(correctName[0])) continue;
+
+    let correctionCount = 0;
+    const maxCorrections = 3;
+
+    let i = 0;
+    while (i <= result.length - correctName.length && correctionCount < maxCorrections) {
       const candidate = result.slice(i, i + correctName.length);
-      if (candidate === correctName) continue;
-      if (candidate[0] !== correctName[0]) continue;
+      if (candidate === correctName) {
+        i++;
+        continue;
+      }
+      if (candidate[0] !== correctName[0]) {
+        i++;
+        continue;
+      }
       let diffs = 0;
       for (let j = 0; j < candidate.length; j++) {
         if (candidate[j] !== correctName[j]) diffs++;
@@ -58,6 +79,10 @@ export function correctCharacterNames(text: string, knownNames: string[]): strin
       if (diffs === 1) {
         result = result.slice(0, i) + correctName + result.slice(i + correctName.length);
         console.log(`[name-correct] "${candidate}" → "${correctName}" (pos ${i})`);
+        i += correctName.length; // 跳过已替换区域，防止重叠纠正
+        correctionCount++;
+      } else {
+        i++;
       }
     }
   }
@@ -190,7 +215,10 @@ function buildStyleAnchor(chain: StorySegment[]): string {
 
 export interface BuildFullPromptResult {
   prompt: string;
+  /** 所有已知名字（含启发式提取），用于 prompt 提醒 AI 保持一致 */
   knownCharacterNames: string[];
+  /** 仅从 Character 表注册的角色名，用于 correctCharacterNames 自动纠错 */
+  registeredCharacterNames: string[];
 }
 
 export async function buildFullPrompt(options: BuildPromptOptions): Promise<BuildFullPromptResult> {
@@ -560,7 +588,8 @@ export async function buildFullPrompt(options: BuildPromptOptions): Promise<Buil
 
   // ─── 12.5 收集所有已知角色名（注册角色 + chain 文本中出现过的人名） ───
   const knownCharacterNames: string[] = [];
-  // 已注册角色的名字（最可靠）
+  const registeredCharacterNames: string[] = [];
+  // 已注册角色的名字（最可靠，用于纠错）
   if (allCharIds.length > 0) {
     try {
       const chars = await characterManager.buildCharacterPrompt(allCharIds);
@@ -569,7 +598,10 @@ export async function buildFullPrompt(options: BuildPromptOptions): Promise<Buil
       if (nameMatches) {
         for (const m of nameMatches) {
           const name = m.replace(/##\s*/, '').replace(/（.*/, '').trim();
-          if (name) knownCharacterNames.push(name);
+          if (name) {
+            knownCharacterNames.push(name);
+            registeredCharacterNames.push(name);
+          }
         }
       }
     } catch {}
@@ -618,5 +650,5 @@ export async function buildFullPrompt(options: BuildPromptOptions): Promise<Buil
   console.log(`  已知角色名: ${knownCharacterNames.join(', ') || '(无)'}`);
   console.log('-'.repeat(60) + '\n');
 
-  return { prompt: fullPrompt, knownCharacterNames };
+  return { prompt: fullPrompt, knownCharacterNames, registeredCharacterNames };
 }

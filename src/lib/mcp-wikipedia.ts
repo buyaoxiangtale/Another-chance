@@ -33,7 +33,10 @@ export async function searchWikipedia(query: string, lang: string = 'zh'): Promi
     url.searchParams.set('format', 'json');
     url.searchParams.set('srlimit', '5');
 
-    const res = await fetch(url.toString(), { headers: { 'User-Agent': 'ChronosMirror/1.0' } });
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 5000);
+    const res = await fetch(url.toString(), { headers: { 'User-Agent': 'ChronosMirror/1.0' }, signal: controller.signal });
+    clearTimeout(timer);
     if (!res.ok) throw new Error(`Wikipedia API error: ${res.status}`);
 
     const data = await res.json();
@@ -66,7 +69,10 @@ export async function getWikiArticle(title: string, lang: string = 'zh'): Promis
     url.searchParams.set('exchars', '500'); // 4.1 增加摘要长度：从默认200-300字增加到500字
     url.searchParams.set('format', 'json');
 
-    const res = await fetch(url.toString(), { headers: { 'User-Agent': 'ChronosMirror/1.0' } });
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 5000);
+    const res = await fetch(url.toString(), { headers: { 'User-Agent': 'ChronosMirror/1.0' }, signal: controller.signal });
+    clearTimeout(timer);
     if (!res.ok) throw new Error(`Wikipedia API error: ${res.status}`);
 
     const data = await res.json();

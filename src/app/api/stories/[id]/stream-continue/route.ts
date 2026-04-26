@@ -43,7 +43,7 @@ export async function POST(
     }
     const tailSegment = chain[chain.length - 1];
 
-    const { prompt, knownCharacterNames } = await buildFullPrompt({
+    const { prompt, registeredCharacterNames } = await buildFullPrompt({
       storyId,
       branchId,
       tailSegment: tailSegment as any,
@@ -158,9 +158,9 @@ export async function POST(
             return;
           }
 
-          // 角色名自动纠错：将 AI 写错的人名修正为已知角色名
-          if (knownCharacterNames.length > 0) {
-            fullContent = correctCharacterNames(fullContent, knownCharacterNames);
+          // 角色名自动纠错：仅使用注册角色名，避免启发式提取的误报导致级联替换
+          if (registeredCharacterNames.length > 0) {
+            fullContent = correctCharacterNames(fullContent, registeredCharacterNames);
           }
 
           // 记忆连贯性：发现并自动注册新角色；返回"段落中所有角色（含新注册）"

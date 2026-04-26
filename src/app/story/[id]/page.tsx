@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import Link from 'next/link';
+import { useSession } from 'next-auth/react';
 import CharacterPanel from '@/components/CharacterPanel';
 import TimelineBar from '@/components/TimelineBar';
 import DirectorSidebar from '@/components/DirectorSidebar';
@@ -23,12 +24,14 @@ interface Story {
   genre?: string;
   characterIds?: string[];
   visibility?: string;
+  ownerId?: string;
   likeCount?: number;
   isLiked?: boolean;
 }
 
 export default function StoryDetailPage({ params }: { params: { id: string } }) {
   const { id } = params;
+  const { data: session } = useSession();
   const [story, setStory] = useState<Story | null>(null);
   const [segments, setSegments] = useState<StorySegment[]>([]);
   const [branches, setBranches] = useState<StoryBranch[]>([]);
@@ -68,6 +71,8 @@ export default function StoryDetailPage({ params }: { params: { id: string } }) 
   const [regeneratingImageForSeg, setRegeneratingImageForSeg] = useState<string | null>(null);
   const [imageStyle, setImageStyle] = useState<ImageStyle>('ink-wash');
   const [styleRecommendation, setStyleRecommendation] = useState<{style: string, reason: string} | null>(null);
+
+  const isOwner = !!session?.user?.id && story?.ownerId === session.user.id;
 
   const loadBranchSegments = useCallback(async (branchId: string) => {
     const segRes = await fetch(`/api/stories/${id}/segments?branchId=${branchId}`);
@@ -593,11 +598,13 @@ export default function StoryDetailPage({ params }: { params: { id: string } }) 
               </div>
             </div>
             <h1 className="text-sm font-bold text-[var(--ink)] tracking-wider">{story.title}</h1>
-            <button
-              onClick={() => setShowEditModal(true)}
-              className="p-1.5 rounded-lg text-xs text-[var(--muted)] hover:bg-gray-100 transition-all"
-              title="编辑故事信息"
-            >✏️</button>
+            {isOwner && (
+              <button
+                onClick={() => setShowEditModal(true)}
+                className="p-1.5 rounded-lg text-xs text-[var(--muted)] hover:bg-gray-100 transition-all"
+                title="编辑故事信息"
+              >✏️</button>
+            )}
           </div>
         </div>
       </nav>
@@ -665,21 +672,26 @@ export default function StoryDetailPage({ params }: { params: { id: string } }) 
         {/* Social actions bar */}
         <div className="flex items-center justify-center gap-4 mt-4">
           <LikeButton targetId={id} type="story" initialLiked={story.isLiked || false} initialCount={story.likeCount || 0} />
-          <VisibilityToggle
-            currentVisibility={(story as any).visibility || 'PRIVATE'}
-            on_change={async (v) => {
-              const res = await fetch(`/api/stories/${id}`, {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ ...editForm, visibility: v }),
-              });
-              if (res.ok) {
-                const data = await res.json();
-                setStory(data.story);
-                setEditForm((f: any) => ({ ...f, visibility: v }));
-              }
-            }}
-          />
+          {isOwner && (
+            <VisibilityToggle
+              currentVisibility={(story as any).visibility || 'PRIVATE'}
+              on_change={async (v) => {
+                const res = await fetch(`/api/stories/${id}`, {
+                  method: 'PATCH',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ ...editForm, visibility: v }),
+                });
+                if (res.ok) {
+                  const data = await res.json();
+                  setStory(data.story);
+                  setEditForm((f: any) => ({ ...f, visibility: v }));
+                } else {
+                  const err = await res.json().catch(() => ({}));
+                  alert(err.error || '修改可见性失败');
+                }
+              }}
+            />
+          )}
         </div>
       </div>
 
@@ -938,7 +950,7 @@ export default function StoryDetailPage({ params }: { params: { id: string } }) 
       </div>
 
       {/* 编辑故事信息弹窗 */}
-      {showEditModal && (
+      {isOwner && showEditModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setShowEditModal(false)}>
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-md mx-4 p-6 max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             <h2 className="text-lg font-bold text-[var(--ink)] mb-4">编辑故事信息</h2>

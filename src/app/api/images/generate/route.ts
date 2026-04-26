@@ -224,7 +224,7 @@ export async function POST(request: NextRequest) {
       sceneStateEn,
       seed,
       referenceImages: referenceImageHints.length > 0 ? referenceImageHints : undefined,
-      callAIFn: (p: string) => callAIText(p, { maxTokens: 1500 }),
+      callAIFn: (p: string) => callAIText(p, { maxTokens: 4000 }),
     });
 
     // 更新段落的 imageUrls 到数据库（替换旧图，只保留最新一次生成的插图）

@@ -16,6 +16,7 @@
 import { join } from 'path';
 import { writeFile, mkdir } from 'fs/promises';
 import { existsSync } from 'fs';
+import { extractJsonFromAI } from './ai-client';
 import type { ReferenceImageHint } from './reference-image-search';
 import {
   IMAGE_STYLES,
@@ -513,19 +514,16 @@ export async function generateImagesForSegment(
 
         const transText = await callAIFn(translatePrompt);
         if (transText && transText.trim()) {
-          const transMatch = transText.match(/\[[\s\S]*\]/);
-          if (transMatch) {
-            const enPrompts: unknown[] = JSON.parse(transMatch[0]);
-            if (Array.isArray(enPrompts) && enPrompts.some(p => typeof p === 'string')) {
-              scenes = scenes.map((s, i) => ({
-                ...s,
-                prompt: typeof enPrompts[i] === 'string'
-                  ? (enPrompts[i] as string).trim()
-                  : s.prompt,
-              }));
-              translated = true;
-              console.log('[image-generator] 启发式场景已翻译为英文 prompt');
-            }
+          const enPrompts = extractJsonFromAI<string[]>(transText);
+          if (Array.isArray(enPrompts) && enPrompts.some(p => typeof p === 'string')) {
+            scenes = scenes.map((s, i) => ({
+              ...s,
+              prompt: typeof enPrompts[i] === 'string'
+                ? (enPrompts[i] as string).trim()
+                : s.prompt,
+            }));
+            translated = true;
+            console.log('[image-generator] 启发式场景已翻译为英文 prompt');
           }
         } else {
           console.warn('[image-generator] AI 翻译返回空响应');
@@ -586,6 +584,9 @@ export async function generateImagesForSegment(
     });
     // 强力抑制：去 CJK、去引号短语、强抑制指令（GLM/cogview 无 negative_prompt）
     const styledPrompt = enforceNoTextInPrompt(styledPromptRaw);
+    console.log(`\n[image-generator] ===== 最终图片 prompt (scene ${i}) =====`);
+    console.log(styledPrompt);
+    console.log('[image-generator] ========================================\n');
     // 同段内 3 张图用不同 seed（sceneSeed = baseSeed + i），保持角色一致但构图各异
     const sceneSeed = typeof seed === 'number' ? seed + i : undefined;
 
@@ -736,52 +737,17 @@ ${segment.slice(0, 1500)}`;
   try {
     const text = await callAIFn(prompt);
 
-    // ── 健壮 JSON 解析：兼容 markdown 包裹、截断响应等 ──
-    let jsonStr: string | null = null;
-
-    // 1. 直接正则匹配
-    const directMatch = text.match(/\[[\s\S]*\]/);
-    if (directMatch) {
-      jsonStr = directMatch[0];
-    }
-
-    // 2. 剥离 markdown 代码块后再匹配（```json ... ```）
-    if (!jsonStr) {
-      const stripped = text
-        .replace(/^```(?:json)?\s*\n?/i, '')
-        .replace(/\n?```\s*$/i, '')
-        .trim();
-      const strippedMatch = stripped.match(/\[[\s\S]*\]/);
-      if (strippedMatch) {
-        jsonStr = strippedMatch[0];
-      }
-    }
-
-    // 3. 尝试修复截断 JSON（找到 [ 和最后一个 }，手动闭合 ]
-    if (!jsonStr) {
-      const startIdx = text.indexOf('[');
-      const lastObjClose = text.lastIndexOf('}');
-      if (startIdx >= 0 && lastObjClose > startIdx) {
-        const candidate = text.slice(startIdx, lastObjClose + 1) + ']';
-        try {
-          JSON.parse(candidate);
-          jsonStr = candidate;
-        } catch {
-          // 修复失败，继续
-        }
-      }
-    }
-
-    if (!jsonStr) {
-      console.warn(`[image-generator] AI 返回内容无法解析为 JSON，前200字: ${text.slice(0, 200)}`);
-      throw new Error('无法解析 AI 返回的 JSON');
-    }
-
-    const parsed = JSON.parse(jsonStr) as Array<{
+    // ── 健壮 JSON 解析：兼容推理模型思考文本、markdown 包裹、截断响应等 ──
+    const parsed = extractJsonFromAI<Array<{
       description: string;
       enPrompt?: string;
       type?: 'scene' | 'character' | 'object';
-    }>;
+    }>>(text);
+
+    if (!parsed) {
+      console.warn(`[image-generator] AI 返回内容无法解析为 JSON，前200字: ${text.slice(0, 200)}`);
+      throw new Error('无法解析 AI 返回的 JSON');
+    }
 
     return parsed.slice(0, 3).map(item => {
       const type = (item.type || 'scene') as SceneDescription['type'];

@@ -2,14 +2,12 @@
  * Prompt 构建
  *
  * 顺序：系统指令 → 故事元信息 → 风格锚点 → 角色状态 → 活跃事件 → 分支记忆 →
- *      导演覆盖 → 前文上下文 → 世界观 → 事实锚点 → 节奏 → 记忆提醒 → 续写指令
+ *      导演覆盖 → 前文上下文 → 世界观 → 节奏 → 记忆提醒 → 续写指令
  */
 
 import { characterManager } from './character-engine';
 import { timelineEngine, buildTimelinePrompt } from './timeline-engine';
 import { lorebook } from './lorebook';
-import { enrichPromptWithFacts } from './knowledge-cache';
-import { extractHistoricalEntities } from './mcp-wikipedia';
 import { directorManager } from './director-manager';
 import { PacingEngine } from './pacing-engine';
 import { contextSummarizer, estimateTokens } from './context-summarizer';
@@ -482,48 +480,6 @@ export async function buildFullPrompt(options: BuildPromptOptions): Promise<Buil
   if (contextText.trim()) {
     parts.push(`## 当前故事进展\n${contextText}`);
   }
-
-  // ─── 9. 事实锚点 ───
-  try {
-    const entities: Array<{ name: string; type: string }> = [];
-
-    // 优先从已注册角色表取实体
-    if (story && (story as any).characterIds) {
-      for (const cid of (story as any).characterIds) {
-        const c = await characterManager.getById(cid);
-        if (c) entities.push({ name: c.name, type: 'person' });
-      }
-    }
-
-    // 冷启动兜底：characterIds 为空时，从故事标题和上下文文本中提取实体
-    if (entities.length === 0) {
-      const sourceText = [storyTitle, storyDescription, contextText].filter(Boolean).join(' ');
-
-      // 策略 A：多类型实体提取（人名+地名+事件+器物）
-      const historicalEntities = extractHistoricalEntities(sourceText);
-      const typePriority: Record<string, number> = { event: 0, place: 1, person: 2, artifact: 3 };
-      historicalEntities.sort((a, b) => (typePriority[a.type] ?? 9) - (typePriority[b.type] ?? 9));
-      for (const ent of historicalEntities.slice(0, 8)) {
-        entities.push({ name: ent.name, type: ent.type });
-      }
-
-      // 策略 B：若多类型提取仍然为空，回退到姓氏启发式
-      if (entities.length === 0) {
-        const knownPersons = extractPersonNames(sourceText);
-        for (const name of knownPersons.slice(0, 5)) {
-          entities.push({ name, type: 'person' });
-        }
-      }
-    }
-
-    if (entities.length > 0) {
-      const facts = await enrichPromptWithFacts(contextText, entities, { genre: effectiveGenre, era: (story as any)?.era });
-      if (facts && facts.includes('--- 历史事实参考 ---')) {
-        const factBlock = facts.split('--- 历史事实参考 ---')[1].split('--- 参考结束 ---')[0];
-        if (factBlock.trim()) parts.push(`## 历史事实参考\n${factBlock.trim()}`);
-      }
-    }
-  } catch {}
 
   // ─── 10. 世界观 ───
   try {

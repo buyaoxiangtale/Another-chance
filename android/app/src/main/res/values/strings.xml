@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">古事</string>
+    <string name="title_activity_main">古事</string>
+    <string name="package_name">com.gushi.mobile</string>
+    <string name="custom_url_scheme">com.gushi.mobile</string>
+</resources>

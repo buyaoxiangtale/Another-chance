@@ -1,104 +1,27 @@
 {
-  "name": "gushi-mobile",
-  "version": "1.0.0",
-  "description": "古事 - 分叉故事续写平台移动应用",
-  "main": "index.js",
-  "scripts": {
-    "cap:ios": "npx cap sync ios",
-    "cap:android": "npx cap sync android",
-    "cap:open:ios": "npx cap open ios",
-    "cap:open:android": "npx cap open android",
-    "cap:run:ios": "npx cap run ios",
-    "cap:run:android": "npx cap run android",
-    "build:ios": "npm run cap:ios && xcodebuild -workspace ios/App/App.xcworkspace -scheme App -configuration Debug -destination 'platform=iOS Simulator,name=iPhone 15' build",
-    "build:android": "npm run cap:android && cd android && ./gradlew assembleDebug"
+  "appId": "com.gushi.mobile",
+  "appName": "古事",
+  "webDir": "out",
+  "server": {
+    "url": "http://10.6.8.91:3000",
+    "cleartext": true,
+    "androidScheme": "http"
   },
-  "keywords": [
-    "react-native",
-    "capacitor",
-    "story",
-    "historical",
-    "interactive"
-  ],
-  "author": "古事团队",
-  "license": "MIT",
-  "dependencies": {
-    "@capacitor/core": "^5.0.0",
-    "@capacitor/app": "^5.0.0",
-    "@capacitor/browser": "^5.0.0",
-    "@capacitor/camera": "^5.0.0",
-    "@capacitor/haptics": "^5.0.0",
-    "@capacitor/local-notifications": "^5.0.0",
-    "@capacitor/network": "^5.0.0",
-    "@capacitor/preferences": "^5.0.0",
-    "@capacitor/splash-screen": "^5.0.0",
-    "@capacitor/status-bar": "^5.0.0",
-    "react": "^18.0.0",
-    "react-dom": "^18.0.0",
-    "react-router-dom": "^6.0.0"
+  "android": {
+    "minSdkVersion": 24,
+    "allowMixedContent": true,
+    "webContentsDebuggingEnabled": true
   },
-  "devDependencies": {
-    "@capacitor/cli": "^5.0.0",
-    "@types/react": "^18.0.0",
-    "@types/react-dom": "^18.0.0",
-    "typescript": "^5.0.0"
-  },
-  "capacitor": {
-    "ios": {
-      "name": "古事",
-      "webDir": "dist",
-      "bundleId": "com.gushi.mobile",
-      "versionCode": "1",
-      "minimumSystemVersion": "14.0",
-      "permissions": {
-        "camera": "Camera and Photo Library",
-        "photos": "Photo Library",
-        "notifications": "Local Notifications"
-      },
-      "config": {
-        "iosScheme": "gushi"
-      }
+  "plugins": {
+    "StatusBar": {
+      "style": "dark",
+      "backgroundColor": "#1a1a2e"
     },
-    "android": {
-      "name": "古事",
-      "webDir": "dist",
-      "packageId": "com.gushi.mobile",
-      "versionCode": "1",
-      "minSdkVersion": 22,
-      "permissions": [
-        "CAMERA",
-        "READ_EXTERNAL_STORAGE",
-        "WRITE_EXTERNAL_STORAGE"
-      ],
-      "config": {
-        "buildConfig": {
-          "applicationId": "com.gushi.mobile"
-        }
-      }
+    "SplashScreen": {
+      "launchAutoHide": true,
+      "androidScaleType": "CENTER_CROP",
+      "splashFullScreen": true,
+      "splashImmersive": true
     }
-  },
-  "config": {
-    "ionic": {
-      "webDir": "dist",
-      "bundledWebRuntime": false
-    }
-  },
-  "eslintConfig": {
-    "extends": [
-      "react-app",
-      "react-app/jest"
-    ]
-  },
-  "browserslist": {
-    "production": [
-      ">0.2%",
-      "not dead",
-      "not op_mini all"
-    ],
-    "development": [
-      "last 1 chrome version",
-      "last 1 firefox version",
-      "last 1 safari version"
-    ]
   }
 }

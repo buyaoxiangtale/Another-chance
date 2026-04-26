@@ -222,6 +222,11 @@ export default function StoryDetailPage({ params }: { params: { id: string } }) 
               if (parsed.type === 'pause') {
                 setIsPaused(true);
               }
+              if (parsed.type === 'error' && parsed.message) {
+                alert(parsed.message);
+                await loadBranchSegments(currentBranchId);
+                return;
+              }
               if (parsed.type === 'metadata' && parsed.data) {
                 // Could update UI with metadata
               }

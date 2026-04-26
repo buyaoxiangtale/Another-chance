@@ -137,6 +137,16 @@ export async function POST(
       console.warn('[continue] 角色发现/注册失败:', e);
     }
 
+    // 乐观锁：确认 tail 没有被其他请求抢先追加
+    const currentChain = await getOrderedChain(storyId, branchId);
+    const currentTail = currentChain[currentChain.length - 1];
+    if (currentTail?.id !== tailSegment.id) {
+      return NextResponse.json({
+        success: false,
+        error: '该分支已有新内容产生，请刷新页面后重试',
+      }, { status: 409 });
+    }
+
     const newSegment = await prisma.storySegment.create({
       data: {
         storyId,

@@ -121,7 +121,9 @@ export async function POST(
 
               try {
                 const parsed = JSON.parse(data);
-                const content = parsed.choices?.[0]?.delta?.content;
+                const delta = parsed.choices?.[0]?.delta;
+                // 只取 content（正文），忽略 reasoning_content（思考过程）
+                const content = delta?.content;
                 if (content) {
                   fullContent += content;
                   lineBuffer += content;

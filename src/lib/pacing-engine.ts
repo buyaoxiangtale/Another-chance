@@ -12,6 +12,14 @@ const PACE_WORD_RANGES: Record<PacingPace, [number, number]> = {
   summary: [150, 250],
 };
 
+/** 按 pace 对应的 maxTokens（中文字符数 × ~3.5 token/字 + 20% 余量） */
+const PACE_MAX_TOKENS: Record<PacingPace, number> = {
+  rush: 500,
+  detailed: 1500,
+  pause: 600,
+  summary: 1000,
+};
+
 const PACE_INSTRUCTIONS: Record<PacingPace, string> = {
   rush: '节奏紧凑，用简短的句子快速推进情节，制造紧迫感。少用描写，多用动作和对话。',
   detailed: '节奏舒缓，用细腻的笔触描写场景、心理和氛围。注重感官细节和情感层次。',
@@ -42,6 +50,11 @@ export class PacingEngine {
   getMoodInstruction(): string {
     if (!this.config.mood) return '';
     return `情绪基调：${this.config.mood}。`;
+  }
+
+  /** 根据节奏模式返回 AI 生成的 maxTokens 上限 */
+  getMaxTokens(): number {
+    return PACE_MAX_TOKENS[this.config.pace];
   }
 
   getMaxLinesPerStep(): number {

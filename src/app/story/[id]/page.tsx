@@ -10,6 +10,7 @@ import PacingControls from '@/components/PacingControls';
 import StoryImageDisplay from '@/components/story/StoryImageDisplay';
 import { IMAGE_STYLES, type ImageStyle, type ConcreteImageStyle } from '@/lib/image-styles';
 import type { PacingConfig, Character, StorySegment, StoryBranch } from '@/types/story';
+import { getStaticBranchDirections } from '@/lib/genre-config';
 import LikeButton from '@/components/social/LikeButton';
 import CommentSection from '@/components/social/CommentSection';
 import VisibilityToggle from '@/components/social/VisibilityToggle';
@@ -64,6 +65,7 @@ export default function StoryDetailPage({ params }: { params: { id: string } }) 
   const [pacingConfig, setPacingConfig] = useState<PacingConfig>({ pace: 'detailed', maxLinesPerStep: 5 });
   const [isPaused, setIsPaused] = useState(false);
   const [suggestedDirections, setSuggestedDirections] = useState<Array<{ icon: string; label: string; desc: string }>>([]);
+  const [suggestionsLoading, setSuggestionsLoading] = useState(false);
   const [displayedLines, setDisplayedLines] = useState<string[]>([]);
   const [lineStep, setLineStep] = useState(0);
   const readerRef = useRef<ReadableStreamDefaultReader<Uint8Array> | null>(null);
@@ -280,37 +282,46 @@ export default function StoryDetailPage({ params }: { params: { id: string } }) 
     }
   };
 
-  // C6.7: Dynamic branch directions
+  // C6.7: Dynamic branch directions (混合方案：静态模板 + AI 生成)
   const handleBranch = async (segmentId: string) => {
     setBranchingSegmentId(segmentId);
     setUserDirection('');
     setCustomDirection('');
 
-    // Generate dynamic suggestions based on story context
+    // Phase 1: 立即展示 genre 对应的静态方向
     try {
       const charRes = await fetch(`/api/stories/${id}/characters`);
+      let chars: Array<{ name: string; role: string }> = [];
       if (charRes.ok) {
-        const chars: Character[] = Array.isArray(await charRes.json()) ? await charRes.json() : [];
-        if (chars.length > 0) {
-          const mainChars = chars.filter(c => c.role === 'protagonist' || c.role === 'antagonist').slice(0, 3);
-          const directions = [
-            { icon: '🗡️', label: `${mainChars[0]?.name || '主角'}采取行动`, desc: `让${mainChars[0]?.name || '主角'}改变策略` },
-            { icon: '🔄', label: '局势急转', desc: '意外事件打破当前格局' },
-            { icon: '🤝', label: '暗中联手', desc: `${mainChars[0]?.name || '主角'}与${mainChars[1]?.name || '对手'}达成合作` },
-            { icon: '🏛️', label: '朝堂博弈', desc: '将冲突转移至更高层面' },
-          ];
-          setSuggestedDirections(directions);
+        const raw = await charRes.json();
+        const arr: Character[] = Array.isArray(raw) ? raw : (raw.characters || []);
+        chars = arr.map(c => ({ name: c.name, role: c.role }));
+      }
+      setSuggestedDirections(getStaticBranchDirections(story?.genre, chars));
+    } catch {
+      setSuggestedDirections(getStaticBranchDirections('', []));
+    }
+    setShowBranchDialog(true);
+
+    // Phase 2: 后台异步获取 AI 生成的精准建议
+    setSuggestionsLoading(true);
+    try {
+      const res = await fetch(`/api/stories/${id}/branch-suggestions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ segmentId, branchId: currentBranchId }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.suggestions?.length > 0) {
+          setSuggestedDirections(data.suggestions);
         }
       }
     } catch {
-      setSuggestedDirections([
-        { icon: '🗡️', label: '加强战争策略', desc: '以更精妙的战术改写战局' },
-        { icon: '🤝', label: '转向外交途径', desc: '以谈判和联盟化解危机' },
-        { icon: '🏛️', label: '专注内政发展', desc: '休养生息，积蓄力量' },
-        { icon: '🔄', label: '寻求盟友帮助', desc: '联合他人共同应对挑战' },
-      ]);
+      // 静默失败，静态方向保持展示
+    } finally {
+      setSuggestionsLoading(false);
     }
-    setShowBranchDialog(true);
   };
 
   const confirmBranch = async () => {
@@ -465,12 +476,7 @@ export default function StoryDetailPage({ params }: { params: { id: string } }) 
             <p className="text-sm text-[var(--muted)] mb-4">选择一个方向，或输入你想要的历史走向</p>
             
             <div className="space-y-2 mb-5">
-              {(suggestedDirections.length > 0 ? suggestedDirections : [
-                { icon: '🗡️', label: '加强战争策略', desc: '以更精妙的战术改写战局' },
-                { icon: '🤝', label: '转向外交途径', desc: '以谈判和联盟化解危机' },
-                { icon: '🏛️', label: '专注内政发展', desc: '休养生息，积蓄力量' },
-                { icon: '🔄', label: '寻求盟友帮助', desc: '联合他人共同应对挑战' },
-              ]).map((option) => (
+              {suggestedDirections.map((option) => (
                 <button
                   key={option.label}
                   onClick={() => { setUserDirection(option.label); setCustomDirection(''); }}
@@ -489,6 +495,12 @@ export default function StoryDetailPage({ params }: { params: { id: string } }) 
                   <p className="text-xs text-[var(--muted)] mt-0.5 ml-7">{option.desc}</p>
                 </button>
               ))}
+              {suggestionsLoading && (
+                <div className="flex items-center gap-2 px-4 py-2 text-xs text-[var(--muted)]">
+                  <span className="inline-block w-3 h-3 border-2 border-[var(--gold)] border-t-transparent rounded-full animate-spin" />
+                  AI 正在生成更精准的建议...
+                </div>
+              )}
             </div>
 
             <div className="mb-4">

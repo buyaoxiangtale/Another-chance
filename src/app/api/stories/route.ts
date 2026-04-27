@@ -158,26 +158,27 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const fullStory = await prisma.story.findUnique({ where: { id: story.id } });
+    // 同步等待封面图生成，确保在响应前完成
+    let coverResult: { success: boolean; coverImageUrl?: string; error?: string } | null = null;
+    try {
+      coverResult = await generateCoverImage(story.id);
+      if (coverResult.success) {
+        console.log(`[stories/create] 封面图生成成功: ${coverResult.coverImageUrl}`);
+      } else {
+        console.warn(`[stories/create] 封面图生成失败: ${coverResult.error}`);
+      }
+    } catch (e) {
+      console.warn('[stories/create] 封面图生成异常:', e);
+    }
 
-    // 后台生成封面图：setTimeout 确保脱离请求处理上下文，不会被 Next.js 终止
-    const sid = story.id;
-    setTimeout(() => {
-      generateCoverImage(sid)
-        .then(result => {
-          if (result.success) {
-            console.log(`[stories/create] 封面图生成成功: ${result.coverImageUrl}`);
-          } else {
-            console.warn(`[stories/create] 封面图生成失败: ${result.error}`);
-          }
-        })
-        .catch(e => console.warn('[stories/create] 封面图生成异常:', e));
-    }, 1000);
+    // 重新查询故事以获取最新数据（包含封面图）
+    const fullStory = await prisma.story.findUnique({ where: { id: story.id } });
 
     return NextResponse.json({
       success: true,
       story: fullStory,
       firstSegment,
+      coverImageUrl: coverResult?.coverImageUrl || undefined,
       message: '故事创建成功，已生成开篇段落',
     }, { status: 201 });
   } catch (error) {

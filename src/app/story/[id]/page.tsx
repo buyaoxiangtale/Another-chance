@@ -57,6 +57,7 @@ export default function StoryDetailPage({ params }: { params: { id: string } }) 
   const [showEditModal, setShowEditModal] = useState(false);
   const [editForm, setEditForm] = useState({ title: '', description: '', genre: '', era: '', author: '', visibility: 'PRIVATE' });
   const [saving, setSaving] = useState(false);
+  const [regeneratingCover, setRegeneratingCover] = useState(false);
   // 段落编辑/删除
   const [editingSegmentId, setEditingSegmentId] = useState<string | null>(null);
   const [editingContent, setEditingContent] = useState('');
@@ -1052,6 +1053,38 @@ export default function StoryDetailPage({ params }: { params: { id: string } }) 
                   <option value="UNLISTED">🔗 隐链 — 有链接即可访问</option>
                   <option value="PUBLIC">🌐 公开 — 所有人可见</option>
                 </select>
+              </div>
+              {/* 封面图管理 */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">封面图</label>
+                <div className="flex items-center gap-3">
+                  {story.coverImageUrl && (
+                    <img src={story.coverImageUrl} alt="封面" className="w-12 h-12 rounded object-cover border" />
+                  )}
+                  <button
+                    onClick={async () => {
+                      setRegeneratingCover(true);
+                      try {
+                        const res = await fetch('/api/images/generate-cover', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ storyId: id, force: true }),
+                        });
+                        if (res.ok) {
+                          const data = await res.json();
+                          setStory(s => s ? { ...s, coverImageUrl: data.coverImageUrl } : s);
+                        } else {
+                          alert('封面图生成失败，请检查图片 API 配置');
+                        }
+                      } catch { alert('封面图生成失败'); }
+                      finally { setRegeneratingCover(false); }
+                    }}
+                    disabled={regeneratingCover}
+                    className="px-3 py-1.5 text-xs bg-amber-100 text-amber-800 rounded-lg hover:bg-amber-200 transition-colors disabled:opacity-50"
+                  >
+                    {regeneratingCover ? '生成中...' : story.coverImageUrl ? '重新生成封面' : '生成封面'}
+                  </button>
+                </div>
               </div>
             </div>
             <div className="flex justify-end gap-3 mt-6">

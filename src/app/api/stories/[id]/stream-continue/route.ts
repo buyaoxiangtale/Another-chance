@@ -75,7 +75,9 @@ export async function POST(
       warnings: consistencyWarnings.length > 0 ? consistencyWarnings : undefined,
     };
 
-    const maxTokens = pacingConfig?.pace === 'detailed' ? 4000 : 2000;
+    const maxTokens = pacingConfig
+      ? new PacingEngine(pacingConfig).getMaxTokens()
+      : 2000;
     const { url, headers, body } = buildOpenAIRequest(prompt, undefined, maxTokens, story as any);
     const bodyObj = JSON.parse(body);
     bodyObj.stream = true;

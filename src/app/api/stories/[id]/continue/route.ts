@@ -9,6 +9,7 @@ import { timelineEngine } from '@/lib/timeline-engine';
 import { consistencyChecker } from '@/lib/consistency-checker';
 import { callAIText } from '@/lib/ai-client';
 import { classifyGenre } from '@/lib/genre-config';
+import { PacingEngine } from '@/lib/pacing-engine';
 import { characterManager } from '@/lib/character-engine';
 import { EventTracker } from '@/lib/event-tracker';
 import type { StorySegment } from '@/lib/prisma';
@@ -97,7 +98,9 @@ export async function POST(
       prompt = `故事标题：${story.title}\n故事背景：${story.description || ''}\n\n当前故事进展：\n${contextSummary}\n\n${styleHint}下一段（150-300字）${continuityHint}`;
     }
 
-    const maxTokens = pacingConfig?.pace === 'detailed' ? 4000 : 2000;
+    const maxTokens = pacingConfig
+      ? new PacingEngine(pacingConfig).getMaxTokens()
+      : 2000;
 
     const _genre = story.genre || '';
     const _desc = story.description || '';

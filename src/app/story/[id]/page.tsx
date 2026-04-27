@@ -213,13 +213,10 @@ export default function StoryDetailPage({ params }: { params: { id: string } }) 
             if (data === '[DONE]') break;
             try {
               const parsed = JSON.parse(data);
-              if (parsed.content) {
+              // 只累积原始流式 content，忽略 line 事件（后端发 line 时不再发原始 content）
+              if (parsed.content && parsed.type !== 'line') {
                 full += parsed.content;
                 setNewContent(full);
-              }
-              // C6.6: Handle new SSE event types
-              if (parsed.type === 'line' && parsed.content) {
-                // Line-level event — already handled by content above
               }
               if (parsed.type === 'pause') {
                 setIsPaused(true);

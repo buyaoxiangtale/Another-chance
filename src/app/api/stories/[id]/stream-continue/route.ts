@@ -122,8 +122,8 @@ export async function POST(
               try {
                 const parsed = JSON.parse(data);
                 const delta = parsed.choices?.[0]?.delta;
-                // GLM 推理模型正文在 reasoning_content，content 为空
-                const content = delta?.content || delta?.reasoning_content;
+                // 只取 content（正文），忽略 reasoning_content（思考过程）
+                const content = delta?.content;
                 if (content) {
                   fullContent += content;
                   lineBuffer += content;

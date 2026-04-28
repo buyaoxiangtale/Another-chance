@@ -62,11 +62,12 @@ export async function PATCH(
     }
 
     const body = await request.json();
-    const { title, description, genre, era, author, visibility, publishedAt } = body;
+    const { title, description, storyType, genre, era, author, visibility, publishedAt } = body;
 
     const data: any = {};
     if (title !== undefined) data.title = title;
     if (description !== undefined) data.description = description;
+    if (storyType !== undefined) data.storyType = storyType || null;
     if (genre !== undefined) data.genre = genre;
     if (era !== undefined) data.era = era;
     if (author !== undefined) data.author = author;

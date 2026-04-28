@@ -80,6 +80,7 @@ export type Story = {
   // C1: 1.6 扩展
   era?: string;
   genre?: string;
+  storyType?: string;
   characterIds?: string[];
   // Social
   ownerId?: string;
@@ -204,6 +205,7 @@ class StoryClass {
   rootSegmentId?: string;
   era?: string;
   genre?: string;
+  storyType?: string;
   characterIds?: string[];
   constructor(data: Story) { Object.assign(this, data); }
 }

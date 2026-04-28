@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import CharacterPanel from '@/components/CharacterPanel';
 import TimelineBar from '@/components/TimelineBar';
@@ -23,6 +24,7 @@ interface Story {
   author?: string;
   era?: string;
   genre?: string;
+  storyType?: string;
   characterIds?: string[];
   visibility?: string;
   ownerId?: string;
@@ -31,8 +33,55 @@ interface Story {
   coverImageUrl?: string;
 }
 
+const storyTypeOptions = [
+  { id: 'history', name: '历史', description: '历史演义、军事战争、穿越重生' },
+  { id: 'fantasy', name: '幻想', description: '玄幻仙侠、科幻末世、奇幻武侠' },
+  { id: 'mystery', name: '悬疑', description: '推理探案、都市生活、现当代故事' },
+  { id: 'fanfic', name: '同人', description: '动漫小说影视游戏等已知 IP 的二创' },
+];
+
+const genreOptions: Record<string, { value: string; label: string }[]> = {
+  history: [
+    { value: '正史', label: '正史' },
+    { value: '演义', label: '演义' },
+    { value: '架空', label: '架空历史' },
+    { value: '穿越', label: '穿越' },
+    { value: '军事', label: '军事' },
+  ],
+  fantasy: [
+    { value: '玄幻', label: '玄幻' },
+    { value: '仙侠', label: '仙侠' },
+    { value: '武侠', label: '武侠' },
+    { value: '奇幻', label: '奇幻' },
+    { value: '科幻', label: '科幻' },
+    { value: '末世', label: '末世' },
+  ],
+  mystery: [
+    { value: '悬疑', label: '悬疑推理' },
+    { value: '都市', label: '都市' },
+    { value: '现代', label: '现代文学' },
+    { value: '军事', label: '军事' },
+  ],
+  fanfic: [
+    { value: '同人', label: '同人' },
+    { value: '架空', label: '架空' },
+    { value: '穿越', label: '穿越' },
+  ],
+};
+
+const eraOptions = [
+  '先秦', '秦', '汉', '三国', '晋', '南北朝', '隋', '唐', '宋', '元', '明', '清',
+  '近代', '民国', '现代', '当代', '近未来', '未来', '架空世界', '其他',
+];
+
+const storyTypeLabelMap = storyTypeOptions.reduce<Record<string, string>>((acc, option) => {
+  acc[option.id] = option.name;
+  return acc;
+}, {});
+
 export default function StoryDetailPage({ params }: { params: { id: string } }) {
   const { id } = params;
+  const searchParams = useSearchParams();
   const { data: session } = useSession();
   const [story, setStory] = useState<Story | null>(null);
   const [segments, setSegments] = useState<StorySegment[]>([]);
@@ -55,7 +104,7 @@ export default function StoryDetailPage({ params }: { params: { id: string } }) 
   const [showDirectorSidebar, setShowDirectorSidebar] = useState(false);
   const [showTimeline, setShowTimeline] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
-  const [editForm, setEditForm] = useState({ title: '', description: '', genre: '', era: '', author: '', visibility: 'PRIVATE' });
+  const [editForm, setEditForm] = useState({ title: '', description: '', storyType: '', genre: '', era: '', author: '', visibility: 'PRIVATE' });
   const [saving, setSaving] = useState(false);
   const [regeneratingCover, setRegeneratingCover] = useState(false);
   // 段落编辑/删除
@@ -110,6 +159,7 @@ export default function StoryDetailPage({ params }: { params: { id: string } }) 
         setEditForm({
           title: sData.story.title || '',
           description: sData.story.description || '',
+          storyType: sData.story.storyType || '',
           genre: sData.story.genre || '',
           era: sData.story.era || '',
           author: sData.story.author || '',
@@ -125,6 +175,12 @@ export default function StoryDetailPage({ params }: { params: { id: string } }) 
     }
     load();
   }, [id]);
+
+  useEffect(() => {
+    if (searchParams.get('edit') === 'true' && isOwner) {
+      setShowEditModal(true);
+    }
+  }, [searchParams, isOwner]);
 
   // 加载风格推荐
   useEffect(() => {
@@ -688,11 +744,23 @@ export default function StoryDetailPage({ params }: { params: { id: string } }) 
         <div className="divider-ornament mb-4"><span>✦</span></div>
         <h1 className="text-3xl md:text-4xl font-bold text-[var(--ink)] tracking-widest mb-3">{story.title}</h1>
         {story.description && <p className="text-[var(--muted)] text-sm">{story.description}</p>}
-        {story.era && (
-          <div className="mt-2">
-            <span className="inline-flex items-center gap-1 px-3 py-1 bg-amber-50 text-amber-800 text-xs font-medium rounded-full border border-amber-200">
-              📜 {story.era}
-            </span>
+        {(story.storyType || story.genre || story.era) && (
+          <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
+            {story.storyType && (
+              <span className="inline-flex items-center gap-1 px-3 py-1 bg-stone-100 text-stone-700 text-xs font-medium rounded-full border border-stone-200">
+                分类：{storyTypeLabelMap[story.storyType] || story.storyType}
+              </span>
+            )}
+            {story.genre && (
+              <span className="inline-flex items-center gap-1 px-3 py-1 bg-orange-50 text-orange-700 text-xs font-medium rounded-full border border-orange-200">
+                体裁：{story.genre}
+              </span>
+            )}
+            {story.era && (
+              <span className="inline-flex items-center gap-1 px-3 py-1 bg-amber-50 text-amber-800 text-xs font-medium rounded-full border border-amber-200">
+                📜 {story.era}
+              </span>
+            )}
           </div>
         )}
         {/* Social actions bar */}
@@ -998,40 +1066,66 @@ export default function StoryDetailPage({ params }: { params: { id: string } }) 
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none resize-none"
                 />
               </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">故事分类</label>
+                <div className="grid grid-cols-2 gap-2">
+                  {storyTypeOptions.map(option => (
+                    <button
+                      key={option.id}
+                      type="button"
+                      onClick={() => {
+                        setEditForm(f => ({
+                          ...f,
+                          storyType: option.id,
+                          genre: genreOptions[option.id]?.some(g => g.value === f.genre) ? f.genre : '',
+                        }));
+                      }}
+                      className={`rounded-lg border px-3 py-2 text-left transition-all ${
+                        editForm.storyType === option.id
+                          ? 'border-amber-500 bg-amber-50 text-amber-900'
+                          : 'border-gray-200 text-gray-700 hover:border-amber-300'
+                      }`}
+                    >
+                      <span className="block text-sm font-medium">{option.name}</span>
+                      <span className="block text-xs text-gray-500 mt-0.5">{option.description}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">类型</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">细分体裁</label>
                   <select
                     value={editForm.genre}
                     onChange={e => setEditForm(f => ({ ...f, genre: e.target.value }))}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none"
                   >
-                    <option value="">自动识别</option>
-                    <option value="正史">正史</option>
-                    <option value="演义">演义</option>
-                    <option value="同人">同人</option>
-                    <option value="架空">架空</option>
-                    <option value="玄幻">玄幻</option>
-                    <option value="仙侠">仙侠</option>
-                    <option value="穿越">穿越</option>
-                    <option value="武侠">武侠</option>
-                    <option value="奇幻">奇幻</option>
-                    <option value="科幻">科幻</option>
-                    <option value="末世">末世</option>
-                    <option value="悬疑">悬疑</option>
-                    <option value="都市">都市</option>
-                    <option value="军事">军事</option>
-                    <option value="现代">现代</option>
+                    <option value="">不指定</option>
+                    {editForm.genre && !(genreOptions[editForm.storyType] || Object.values(genreOptions).flat()).some(option => option.value === editForm.genre) && (
+                      <option value={editForm.genre}>{editForm.genre}</option>
+                    )}
+                    {(genreOptions[editForm.storyType] || Object.values(genreOptions).flat()).map((option, index) => (
+                      <option key={`${editForm.storyType || 'all'}-${option.value}-${index}`} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
                   </select>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">时代</label>
-                  <input
+                  <select
                     value={editForm.era}
                     onChange={e => setEditForm(f => ({ ...f, era: e.target.value }))}
-                    placeholder="如：战国、三国"
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none"
-                  />
+                  >
+                    <option value="">不指定</option>
+                    {editForm.era && !eraOptions.includes(editForm.era) && (
+                      <option value={editForm.era}>{editForm.era}</option>
+                    )}
+                    {eraOptions.map(era => (
+                      <option key={era} value={era}>{era}</option>
+                    ))}
+                  </select>
                 </div>
               </div>
               <div>

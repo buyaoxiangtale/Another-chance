@@ -1,0 +1,80 @@
+# 依赖
+node_modules
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# 构建输出
+.next
+out
+dist
+build
+
+# 开发工具
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# 环境变量
+.env
+.env*.local
+.env.development
+.env.production
+.env.test
+
+# Git
+.git
+.gitignore
+.gitattributes
+
+# 文档
+README.md
+CHANGELOG.md
+LICENSE
+*.md
+!**/README.md
+
+# 测试
+coverage
+.nyc_output
+*.test.js
+*.test.ts
+*.spec.js
+*.spec.ts
+tests/
+vitest.config.ts
+
+# 数据（运行时生成）
+data/
+*.db
+*.sqlite
+*.sqlite3
+
+# Docker
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# CI/CD
+.github
+.gitlab-ci.yml
+.travis.yml
+
+# 临时文件
+*.log
+*.tmp
+*.temp
+.cache
+
+# OS 文件
+.DS_Store
+Thumbs.db
+
+# 其他
+.editorconfig
+.prettierrc
+.eslintrc*
+.prettierrc*

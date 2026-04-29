@@ -51,3 +51,6 @@ Docs/todos_*.md
 # Generated images (keep .gitkeep)
 public/generated-images/*
 !public/generated-images/.gitkeep
+
+# Database backups
+/backups/

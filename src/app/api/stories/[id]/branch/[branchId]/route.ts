@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { getUserIdFromRequest } from '@/lib/auth-helpers';
 import { canEditBranch, canViewStory } from '@/lib/permissions';
+import { triggerBackup } from '@/lib/auto-backup';
 
 export async function PATCH(
   request: NextRequest,
@@ -40,6 +41,7 @@ export async function PATCH(
       data: { visibility },
     });
 
+    triggerBackup();
     return NextResponse.json({ success: true, branch: updated });
   } catch (error) {
     console.error('更新分支失败:', error);
@@ -121,6 +123,7 @@ export async function DELETE(
       }).catch(() => {});
     }
 
+    triggerBackup();
     return NextResponse.json({
       success: true,
       deletedBranchIds: Array.from(branchesToDelete),

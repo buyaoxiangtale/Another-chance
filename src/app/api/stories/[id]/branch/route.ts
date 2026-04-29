@@ -6,6 +6,7 @@ import { getOrderedChain } from '@/lib/chain-helpers';
 import { characterManager } from '@/lib/character-engine';
 import { buildFullPrompt, correctCharacterNames } from '@/lib/prompt-builder';
 import { callAIText } from '@/lib/ai-client';
+import { triggerBackup } from '@/lib/auto-backup';
 import type { StorySegment } from '@/lib/prisma';
 
 export async function POST(
@@ -136,6 +137,7 @@ export async function POST(
       });
     }
 
+    triggerBackup();
     return NextResponse.json({
       success: true,
       branch: newBranch,

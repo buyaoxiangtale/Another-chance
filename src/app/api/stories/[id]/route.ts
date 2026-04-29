@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { getUserIdFromRequest } from '@/lib/auth-helpers';
 import { canViewStory, canEditStory, canDeleteStory } from '@/lib/permissions';
+import { triggerBackup } from '@/lib/auto-backup';
 
 export async function GET(
   request: NextRequest,
@@ -85,6 +86,7 @@ export async function PATCH(
       data,
     });
 
+    triggerBackup();
     return NextResponse.json({ success: true, story: updated });
   } catch (error) {
     console.error('更新故事失败:', error);
@@ -115,6 +117,7 @@ export async function DELETE(
     // Cascade delete via Prisma (segments, branches, characters, director states)
     await prisma.story.delete({ where: { id: params.id } });
 
+    triggerBackup();
     return NextResponse.json({
       success: true,
       message: `故事「${story.title}」已删除`,

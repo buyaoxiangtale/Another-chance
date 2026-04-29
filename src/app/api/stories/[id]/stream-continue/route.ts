@@ -12,6 +12,7 @@ import { generateImagesForSegment } from '@/lib/image-generator';
 import { characterManager } from '@/lib/character-engine';
 import { directorManager } from '@/lib/director-manager';
 import { EventTracker } from '@/lib/event-tracker';
+import { triggerBackup } from '@/lib/auto-backup';
 
 export async function POST(
   request: NextRequest,
@@ -308,6 +309,7 @@ ${styleHint}，续写下一段（150-300字），与前文情节连续。`;
           })();
           postProcess.catch(() => {});
 
+          triggerBackup();
           controller.enqueue(encoder.encode('data: [DONE]\n\n'));
           controller.close();
         } catch (err) {

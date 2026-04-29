@@ -47,8 +47,14 @@
 
 ### 环境要求
 
-- Node.js 18+
-- npm 或 yarn
+- **Docker** (推荐) - Windows 10/11, macOS, Linux
+- **或** Node.js 18+ + npm
+
+### Windows 用户
+
+📖 **完整的 Windows 使用指南**: [Windows 支持文档](Docs/WINDOWS_SUPPORT.md)
+
+✅ 完全支持 Windows 10/11，需要安装 [Docker Desktop for Windows](https://www.docker.com/products/docker-desktop/)
 
 ### 安装步骤
 
@@ -260,6 +266,58 @@ npm run mobile:run         # 运行移动端
 
 ## Docker 部署
 
+> 📖 详细的部署指南请参考 [Docker 部署文档](Docs/DOCKER_DEPLOYMENT.md)
+
+### 🍴 Fork 仓库用户
+
+如果你是从这个项目 fork 的，请先阅读 [Fork 仓库配置指南](Docs/FORK_SETUP.md) 了解如何配置 Docker 构建。
+
+### 🚀 快速启动（推荐）
+
+### 🚀 快速启动（推荐）
+
+使用预构建的 Docker 镜像一键启动：
+
+```bash
+# 1. 克隆项目
+git clone https://github.com/buyaoxiangtale/Another-chance.git
+cd Another-chance
+
+# 2. 配置环境变量
+cp .env.example .env
+# 编辑 .env 文件，至少需要配置 AI_API_KEY 和 AI_BASE_URL
+
+# 3. 启动服务（包含 PostgreSQL + 应用）
+docker-compose up -d
+
+# 4. 查看日志
+docker-compose logs -f gushi-app
+
+# 5. 访问应用
+# 浏览器打开 http://localhost:3000
+```
+
+### 仅使用 Docker 镜像
+
+如果你想直接使用 Docker 镜像而不使用 Docker Compose：
+
+```bash
+# 拉取最新镜像
+docker pull dtr12345/another-chance:latest
+
+# 启动容器（需要先启动 PostgreSQL）
+docker run -d \
+  --name gushi-app \
+  -p 3000:3000 \
+  -e DATABASE_URL=postgresql://user:password@host:5432/dbname \
+  -e AI_API_KEY=your_api_key \
+  -e AI_BASE_URL=https://api.openai.com/v1 \
+  -e AI_MODEL=gpt-4 \
+  -e NEXTAUTH_SECRET=your_secret \
+  -e NEXTAUTH_URL=http://localhost:3000 \
+  dtr12345/another-chance:latest
+```
+
 ### 开发环境
 
 ```bash
@@ -272,6 +330,14 @@ docker-compose up gushi-dev
 docker-compose up -d gushi-app
 docker-compose logs -f gushi-app
 ```
+
+### 多架构支持
+
+镜像支持以下架构：
+- linux/amd64
+- linux/arm64
+
+可以在 Apple Silicon Mac、普通 PC 和 ARM 服务器上运行。
 
 ## 使用指南
 

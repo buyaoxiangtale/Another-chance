@@ -2,9 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { getUserIdFromRequest } from '@/lib/auth-helpers';
 import { canViewStory } from '@/lib/permissions';
+import { storiesStore } from '@/lib/simple-db';
 
 import { characterManager } from '@/lib/character-engine';
 import { generateCoverImage } from '@/lib/cover-generator';
+import { triggerBackup } from '@/lib/auto-backup';
 
 export async function GET(request: NextRequest) {
   try {
@@ -28,24 +30,52 @@ export async function GET(request: NextRequest) {
       where.visibility = 'PUBLIC';
     }
 
-    const stories = await prisma.story.findMany({
-      where,
-      orderBy: { createdAt: 'desc' },
-      include: {
-        _count: { select: { segments: true, likes: true, comments: true, branches: true } },
-        owner: { select: { id: true, name: true, image: true } },
-      },
-    });
+    let stories: any[];
+    try {
+      stories = await prisma.story.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        include: {
+          _count: { select: { segments: true, likes: true, comments: true, branches: true } },
+          owner: { select: { id: true, name: true, image: true } },
+        },
+      });
+    } catch (dbError) {
+      // Prisma 连接失败，降级到 JSON 文件存储
+      console.warn('Prisma 数据库不可用，降级到 JSON 文件存储:', dbError);
+      const jsonStories = await storiesStore.load();
+      stories = jsonStories
+        .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+        .map((s: any) => ({
+          ...s,
+          _count: { segments: 0, likes: 0, comments: 0, branches: 0 },
+          owner: null,
+          visibility: 'PUBLIC',
+        }));
+    }
 
     // Add isLiked for each story if user is logged in
-    const storiesWithLikeStatus = userId ? await Promise.all(
-      stories.map(async (s) => {
-        const like = await prisma.storyLike.findUnique({
-          where: { userId_storyId: { userId, storyId: s.id } },
-        });
-        return { ...s, isLiked: !!like };
-      })
-    ) : stories;
+    let storiesWithLikeStatus: any[];
+    if (userId && stories.length > 0) {
+      try {
+        storiesWithLikeStatus = await Promise.all(
+          stories.map(async (s: any) => {
+            try {
+              const like = await prisma.storyLike.findUnique({
+                where: { userId_storyId: { userId, storyId: s.id } },
+              });
+              return { ...s, isLiked: !!like };
+            } catch {
+              return { ...s, isLiked: false };
+            }
+          })
+        );
+      } catch {
+        storiesWithLikeStatus = stories.map((s: any) => ({ ...s, isLiked: false }));
+      }
+    } else {
+      storiesWithLikeStatus = stories;
+    }
 
     return NextResponse.json({
       success: true,
@@ -174,6 +204,7 @@ export async function POST(request: NextRequest) {
     // 重新查询故事以获取最新数据（包含封面图）
     const fullStory = await prisma.story.findUnique({ where: { id: story.id } });
 
+    triggerBackup();
     return NextResponse.json({
       success: true,
       story: fullStory,

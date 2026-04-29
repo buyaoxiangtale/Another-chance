@@ -12,6 +12,7 @@ import { classifyGenre } from '@/lib/genre-config';
 import { PacingEngine } from '@/lib/pacing-engine';
 import { characterManager } from '@/lib/character-engine';
 import { EventTracker } from '@/lib/event-tracker';
+import { triggerBackup } from '@/lib/auto-backup';
 import type { StorySegment } from '@/lib/prisma';
 
 export async function POST(
@@ -202,6 +203,7 @@ export async function POST(
       console.warn('[continue] 新内容矛盾检测失败:', e);
     }
 
+    triggerBackup();
     return NextResponse.json({
       success: true,
       segment: newSegment,

@@ -3,6 +3,7 @@ import prisma from '@/lib/prisma';
 import { getUserIdFromRequest } from '@/lib/auth-helpers';
 import { canViewStory, canEditStory } from '@/lib/permissions';
 import { getOrderedChain } from '@/lib/chain-helpers';
+import { triggerBackup } from '@/lib/auto-backup';
 
 export async function GET(
   request: NextRequest,
@@ -78,6 +79,7 @@ export async function PATCH(
       data,
     });
 
+    triggerBackup();
     return NextResponse.json({ success: true, segment: updated });
   } catch (error) {
     console.error('更新段落失败:', error);
@@ -124,6 +126,7 @@ export async function DELETE(
 
     await prisma.storySegment.delete({ where: { id: segmentId } });
 
+    triggerBackup();
     return NextResponse.json({
       success: true,
       message: `段落已删除，${relinked.count} 个后续段落已重新链接`,

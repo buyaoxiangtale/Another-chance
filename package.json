@@ -23,7 +23,10 @@
     "cap:run:android": "npx cap run android",
     "mobile:setup": "./scripts/init-capacitor.sh",
     "mobile:build": "./scripts/build-mobile.sh",
-    "mobile:run": "./scripts/run-mobile.sh"
+    "mobile:run": "./scripts/run-mobile.sh",
+    "db:backup": "./scripts/backup-db.sh backup",
+    "db:restore": "./scripts/backup-db.sh restore",
+    "db:backups": "./scripts/backup-db.sh list"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

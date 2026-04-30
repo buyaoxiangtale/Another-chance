@@ -1,0 +1,78 @@
+# 生产环境 Docker Compose 配置
+# 使用方法：docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+
+version: '3.8'
+
+services:
+  # PostgreSQL 数据库（生产环境配置）
+  postgres:
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-gushi}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-gushi_prod}
+    command: >
+      postgres
+      -c max_connections=200
+      -c shared_buffers=256MB
+      -c effective_cache_size=1GB
+      -c maintenance_work_mem=64MB
+      -c checkpoint_completion_target=0.9
+      -c wal_buffers=16MB
+      -c default_statistics_target=100
+      -c random_page_cost=1.1
+      -c effective_io_concurrency=200
+      -c work_mem=2621kB
+      -c min_wal_size=1GB
+      -c max_wal_size=4GB
+
+  # 应用服务（生产环境配置）
+  gushi-app:
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=${DATABASE_URL}
+      - AUTH_SECRET=${AUTH_SECRET}
+      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
+      - NEXTAUTH_URL=${NEXTAUTH_URL}
+      - AUTH_TRUST_HOST=true
+      - AI_API_KEY=${AI_API_KEY}
+      - AI_BASE_URL=${AI_BASE_URL}
+      - AI_MODEL=${AI_MODEL}
+      - AI_IMAGE_PROVIDER=${AI_IMAGE_PROVIDER}
+      - AI_IMAGE_API_KEY=${AI_IMAGE_API_KEY}
+      - AI_IMAGE_BASE_URL=${AI_IMAGE_BASE_URL}
+      - AI_IMAGE_MODEL=${AI_IMAGE_MODEL}
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 4G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:3000/api/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Redis 缓存（生产环境启用）
+  gushi-redis:
+    command: >
+      redis-server
+      --maxmemory 512mb
+      --maxmemory-policy allkeys-lru
+      --appendonly yes
+    profiles: []  # 取消 profile 限制，始终启用
+
+  # Nginx 反向代理（生产环境启用）
+  gushi-nginx:
+    ports:
+      - "80:80"
+      - "443:443"
+    profiles: []  # 取消 profile 限制，始终启用

@@ -1,8 +1,5 @@
 # 多阶段构建 - 使用官方 Node.js 镜像作为基础
-FROM node:18-alpine AS deps
-
-# 安装必要的系统依赖
-RUN apk add --no-cache libc6-compat
+FROM node:18-bookworm-slim AS deps
 
 WORKDIR /app
 
@@ -14,12 +11,9 @@ COPY prisma ./prisma/
 RUN npm ci --only=production
 
 # 构建阶段
-FROM node:18-alpine AS builder
+FROM node:18-bookworm-slim AS builder
 
 WORKDIR /app
-
-# 安装必要的系统依赖
-RUN apk add --no-cache libc6-compat
 
 # 复制依赖
 COPY package.json package-lock.json ./
@@ -38,14 +32,24 @@ RUN npx prisma generate
 RUN npm run build
 
 # 生产运行阶段
-FROM node:18-alpine AS runner
+FROM node:18-bookworm-slim AS runner
 
 WORKDIR /app
+
+# 安装运行时依赖（OpenSSL、ca-certificates、PostgreSQL 客户端）
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    openssl \
+    ca-certificates \
+    postgresql-client \
+    gzip && \
+    rm -rf /var/lib/apt/lists/*
 
 # 设置环境变量
 ENV NODE_ENV=production \
     NEXT_TELEMETRY_DISABLED=1 \
-    PORT=3000
+    PORT=3000 \
+    HOSTNAME=0.0.0.0 \
+    AUTH_TRUST_HOST=true
 
 # 创建非 root 用户
 RUN addgroup --system --gid 1001 nodejs && \
@@ -60,6 +64,10 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/package.json ./package.json
 
+# 创建数据目录并授权
+RUN mkdir -p /app/data /app/backups && \
+    chown -R nextjs:nodejs /app/data /app/backups
+
 # 切换到非 root 用户
 USER nextjs
 
@@ -67,8 +75,8 @@ USER nextjs
 EXPOSE 3000
 
 # 健康检查
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD node -e "require('http').get('http://localhost:3000/api/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"
+HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=5 \
+    CMD node -e "require('http').get('http://127.0.0.1:3000/api/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)}).on('error', () => process.exit(1))"
 
 # 启动应用
-CMD ["node", "server.js"]
+CMD ["sh", "-c", "HOSTNAME=0.0.0.0 node server.js"]

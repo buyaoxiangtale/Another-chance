@@ -18,8 +18,8 @@ export async function POST(request: NextRequest) {
         return {
           value: s.style,
           label: meta?.label || s.style,
-          icon: meta?.icon || '',
-          category: meta?.category || '',
+          icon: '',
+          category: '',
           matchScore: s.score,
         };
       })

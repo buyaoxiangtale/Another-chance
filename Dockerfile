@@ -25,6 +25,9 @@ RUN npm ci
 # 复制源代码
 COPY . .
 
+# 删除不兼容的 prisma.config.ts
+RUN rm -f prisma.config.ts
+
 # 生成 Prisma 客户端
 RUN npx prisma generate
 

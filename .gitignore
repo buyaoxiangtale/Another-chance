@@ -54,3 +54,6 @@ public/generated-images/*
 
 # Database backups
 /backups/
+
+# Prisma config (incompatible with current Prisma version)
+prisma.config.ts

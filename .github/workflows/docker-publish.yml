@@ -38,11 +38,19 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
+      - name: Debug secrets (masked)
+        run: |
+          echo "DOCKER_USERNAME length: $(echo "${{ secrets.DOCKER_USERNAME }}" | wc -c)"
+          echo "DOCKER_PASSWORD length: $(echo "${{ secrets.DOCKER_PASSWORD }}" | wc -c)"
+
       - name: Log in to Docker Hub
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Verify login
+        run: docker info | grep Username || echo "Login verification skipped"
 
       - name: Extract metadata for Docker
         id: meta

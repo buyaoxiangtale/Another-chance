@@ -180,9 +180,7 @@ export async function POST(request: NextRequest) {
         await prisma.storySegment.update({
           where: { id: firstSegment.id },
           data: {
-            characters: {
-              set: characterIds.map((id: string) => ({ id }))
-            }
+            characterIds: characterIds
           },
         });
         await prisma.story.update({

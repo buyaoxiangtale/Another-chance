@@ -67,6 +67,14 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/package.json ./package.json
 
+# 复制 standalone 模式遗漏的运行时依赖
+# 这些包被服务端代码使用但 Next.js standalone 没有自动包含
+COPY --from=builder /app/node_modules/@prisma/adapter-pg ./node_modules/@prisma/adapter-pg
+COPY --from=builder /app/node_modules/bcryptjs ./node_modules/bcryptjs
+COPY --from=builder /app/node_modules/next-auth ./node_modules/next-auth
+COPY --from=builder /app/node_modules/@auth ./node_modules/@auth
+COPY --from=builder /app/node_modules/zod ./node_modules/zod
+
 # 创建数据目录并授权
 RUN mkdir -p /app/data /app/backups && \
     chown -R nextjs:nodejs /app/data /app/backups
